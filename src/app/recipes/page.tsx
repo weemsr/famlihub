@@ -42,7 +42,7 @@ const IngredientRow = ({ ing }: { ing: string }) => {
   return (
     <li style={{marginBottom: 12, display: 'flex', flexDirection: 'column'}}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <span dangerouslySetInnerHTML={{__html: ing}} style={{ flex: 1, paddingTop: 2 }}></span>
+        <span style={{ flex: 1, paddingTop: 2 }}>{ing.replace(/<[^>]*>?/gm, '')}</span>
         
         {addingState === 'success' ? (
            <span style={{ color: 'var(--accent-color)', fontSize: 13, fontWeight: 'bold', minWidth: 50, textAlign: 'right' }}>Added! ✓</span>
@@ -427,7 +427,7 @@ export default function RecipesPage() {
                     />
                   ) : (
                     <ol style={{ paddingLeft: 24, color: 'var(--text-primary)' }}>
-                      {(Array.isArray(body.instructions) ? body.instructions : (typeof body.instructions === 'string' ? [body.instructions] : [])).map((inst: any, i: number) => <li key={i} style={{marginBottom: 12}} dangerouslySetInnerHTML={{__html: String(inst)}}></li>)}
+                      {(Array.isArray(body.instructions) ? body.instructions : (typeof body.instructions === 'string' ? [body.instructions] : [])).map((inst: any, i: number) => <li key={i} style={{marginBottom: 12}}>{String(inst).replace(/<[^>]*>?/gm, '')}</li>)}
                     </ol>
                   )}
                 </div>

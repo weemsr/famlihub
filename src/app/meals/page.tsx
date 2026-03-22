@@ -179,8 +179,8 @@ export default function MealsPage() {
             {MEAL_SLOTS.map((slot, i) => {
               const Icon = slot.icon;
               // Support legacy 'Monday' entries gracefully
-              const scheduledMeal = meals.find(m => (m.body.day === dayObj.dbKey || m.body.day === dayObj.dayName) && m.body.mealId === slot.id);
-              const linkedRecipe = scheduledMeal?.body.recipeId ? recipes.find(r => r.id === scheduledMeal.body.recipeId) : null;
+              const scheduledMeal = meals.find(m => m.body && (m.body.day === dayObj.dbKey || m.body.day === dayObj.dayName) && m.body.mealId === slot.id);
+              const linkedRecipe = scheduledMeal?.body?.recipeId ? recipes.find(r => r.id === scheduledMeal.body.recipeId) : null;
               
               return (
                 <div key={slot.id} style={{ 

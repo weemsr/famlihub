@@ -115,7 +115,7 @@ export default function RecipesPage() {
     }
 
     const { data: userData } = await supabase.auth.getUser();
-    if (!res.recipe) { setLoading(false); return; }
+    if (!userData.user || !res.recipe) { setLoading(false); return; }
 
     const { data, error: dbError } = await supabase.from('items').insert({
       type: 'recipe',
@@ -126,7 +126,7 @@ export default function RecipesPage() {
         image: res.recipe.image,
         sourceUrl: res.recipe.sourceUrl
       },
-      user_id: userData?.user?.id
+      user_id: userData.user.id
     }).select().single();
 
     if (dbError) setError(dbError.message);
@@ -143,6 +143,7 @@ export default function RecipesPage() {
     setLoading(true);
     setError('');
     const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) { setLoading(false); return; }
 
     const ings = manualIngredients.split('\n').filter(i => i.trim() !== '');
     const insts = manualInstructions.split('\n').filter(i => i.trim() !== '');
@@ -156,7 +157,7 @@ export default function RecipesPage() {
         image: manualImage.trim(),
         sourceUrl: ''
       },
-      user_id: userData?.user?.id
+      user_id: userData.user.id
     }).select().single();
 
     if (dbError) {

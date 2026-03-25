@@ -12,6 +12,13 @@ export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [input, setInput] = useState('');
 
+  const loadItems = async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    const { data } = await supabase.from('items').select('*').eq('type', 'inventory').order('created_at', { ascending: false });
+    if (data) setItems(data as any);
+  };
+
   useEffect(() => {
     loadItems();
     const channel = supabase.channel('realtime:inventory')
@@ -21,26 +28,27 @@ export default function InventoryPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const loadItems = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
-    const { data } = await supabase.from('items').select('*').eq('type', 'inventory').order('created_at', { ascending: false });
-    if (data) setItems(data as any);
-  };
-
   const addItem = async () => {
     if (!input.trim()) return;
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
-    
+
     const text = input.trim();
+    const prevInput = input;
     setInput('');
-    await supabase.from('items').insert({ type: 'inventory', title: text, user_id: userData.user.id });
+    const { error } = await supabase.from('items').insert({ type: 'inventory', title: text, user_id: userData.user.id });
+    if (error) {
+      setInput(prevInput);
+      return;
+    }
+    loadItems();
   };
 
   const deleteItem = async (id: string) => {
+    const prevItems = items;
     setItems(items.filter(i => i.id !== id));
-    await supabase.from('items').delete().eq('id', id);
+    const { error } = await supabase.from('items').delete().eq('id', id);
+    if (error) setItems(prevItems);
   };
 
   return (

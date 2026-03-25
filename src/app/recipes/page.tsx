@@ -22,20 +22,22 @@ const IngredientRow = ({ ing }: { ing: string }) => {
   const addToGrocery = async (store: 'regular' | 'costco' | 'asian') => {
     setAddingState('adding');
     const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
-    
+    if (!userData.user) { setAddingState('idle'); return; }
+
     const cleanText = ing.replace(/<[^>]*>?/gm, '');
 
-    await supabase.from('items').insert({
+    const { error } = await supabase.from('items').insert({
       type: 'grocery',
       title: cleanText,
       body: { store },
       user_id: userData.user.id
     });
-    
+
+    if (error) { setAddingState('idle'); return; }
+
     setAddingState('success');
     setShowOptions(false);
-    
+
     setTimeout(() => setAddingState('idle'), 2000);
   };
 
@@ -89,8 +91,6 @@ export default function RecipesPage() {
   const [manualIngredients, setManualIngredients] = useState('');
   const [manualInstructions, setManualInstructions] = useState('');
 
-  useEffect(() => { loadRecipes(); }, []);
-
   const loadRecipes = async () => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
@@ -102,6 +102,8 @@ export default function RecipesPage() {
       
     if (data) setRecipes(data);
   };
+
+  useEffect(() => { loadRecipes(); }, []);
 
   const handleImport = async () => {
     if (!url) return;
@@ -175,8 +177,10 @@ export default function RecipesPage() {
   };
 
   const deleteRecipe = async (id: string) => {
+    const prevRecipes = recipes;
     setRecipes(recipes.filter(r => r.id !== id));
-    await supabase.from('items').delete().eq('id', id);
+    const { error } = await supabase.from('items').delete().eq('id', id);
+    if (error) setRecipes(prevRecipes);
   };
 
   const startEdit = (recipe: RecipeItem, e: React.MouseEvent) => {
@@ -212,10 +216,12 @@ export default function RecipesPage() {
       instructions: newInstructions
     };
 
+    const prevRecipes = recipes;
     setRecipes(recipes.map(r => r.id === editingId ? { ...r, title: editTitle, body: updatedBody } : r));
     setEditingId(null);
 
-    await supabase.from('items').update({ title: editTitle, body: updatedBody }).eq('id', editingId);
+    const { error } = await supabase.from('items').update({ title: editTitle, body: updatedBody }).eq('id', editingId);
+    if (error) setRecipes(prevRecipes);
   };
 
   const filtered = recipes.filter(r => (r.title || '').toLowerCase().includes(search.toLowerCase()));

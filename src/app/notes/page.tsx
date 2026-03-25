@@ -20,6 +20,13 @@ export default function NotesPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
 
+  const loadItems = async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+    const { data } = await supabase.from('items').select('*').eq('type', 'note').order('created_at', { ascending: false });
+    if (data) setItems(data as any);
+  };
+
   useEffect(() => {
     loadItems();
     const channel = supabase.channel('realtime:notes')
@@ -29,36 +36,36 @@ export default function NotesPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const loadItems = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
-    const { data } = await supabase.from('items').select('*').eq('type', 'note').order('created_at', { ascending: false });
-    if (data) setItems(data as any);
-  };
-
   const addNote = async () => {
     if (!title.trim() && !body.trim()) return;
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
-    
+
     if (typeof window !== 'undefined' && document.activeElement instanceof HTMLElement) {
       document.activeElement.blur();
     }
-    
+
     const t = title.trim();
     const b = body.trim();
+
+    const { data, error } = await supabase.from('items').insert({ type: 'note', title: t || 'Untitled Note', body: b, user_id: userData.user.id }).select().single();
+    if (error) return; // Keep draft in form on failure
+
     setTitle('');
     setBody('');
     setIsCreating(false);
-    
-    const { data } = await supabase.from('items').insert({ type: 'note', title: t || 'Untitled Note', body: b, user_id: userData.user.id }).select().single();
-    if (data) setExpandedId(data.id);
+    if (data) {
+      setItems(prev => [data as any, ...prev]);
+      setExpandedId(data.id);
+    }
   };
 
   const deleteNote = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    const prevItems = items;
     setItems(items.filter(i => i.id !== id));
-    await supabase.from('items').delete().eq('id', id);
+    const { error } = await supabase.from('items').delete().eq('id', id);
+    if (error) setItems(prevItems);
   };
 
   const startEdit = (note: NoteItem, e: React.MouseEvent) => {
@@ -71,10 +78,12 @@ export default function NotesPage() {
   const saveEdit = async (e: React.MouseEvent) => {
     e.stopPropagation();
     if (!editingId) return;
-    
+
+    const prevItems = items;
     setItems(items.map(i => i.id === editingId ? { ...i, title: editTitle, body: editBody } : i));
     setEditingId(null);
-    await supabase.from('items').update({ title: editTitle, body: editBody }).eq('id', editingId);
+    const { error } = await supabase.from('items').update({ title: editTitle, body: editBody }).eq('id', editingId);
+    if (error) setItems(prevItems);
   };
 
   const cancelEdit = (e: React.MouseEvent) => {

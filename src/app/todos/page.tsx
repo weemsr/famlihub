@@ -36,46 +36,55 @@ export default function TodosPage() {
     if (item) await supabase.from('items').update({ body: { ...item.body, category: targetCategory } }).eq('id', id);
   };
 
-  useEffect(() => {
-    loadItems();
-  }, []);
-
   const loadItems = async () => {
     const { data } = await supabase.from('items').select('*').eq('type', 'todo').order('created_at', { ascending: false });
     if (data) setItems(data);
   };
 
+  useEffect(() => {
+    loadItems();
+  }, []);
+
   const addItem = async () => {
     if (!input.trim()) return;
     const title = input.trim();
     const cat = activeCategory;
-    
+    const prevInput = input;
+
     // Optimistic UI
     const tempId = Math.random().toString();
-    setItems([{ id: tempId, title, is_completed: false, body: { category: cat } }, ...items]);
+    setItems(prev => [{ id: tempId, title, is_completed: false, body: { category: cat } }, ...prev]);
     setInput('');
 
-    await supabase.from('items').insert({ 
-      title, 
+    const { error } = await supabase.from('items').insert({
+      title,
       type: 'todo',
       body: { category: cat }
     });
-    
-    // reload to get real IDs
+
+    if (error) {
+      setItems(prev => prev.filter(i => i.id !== tempId));
+      setInput(prevInput);
+      return;
+    }
     loadItems();
   };
 
   const toggleItem = async (id: string, currentStatus: boolean) => {
     const newStatus = !currentStatus;
     const item = items.find(i => i.id === id);
+    const prevItems = items;
     const updatedBody = { ...item?.body, completedAt: newStatus ? new Date().toISOString() : null };
     setItems(items.map(i => i.id === id ? { ...i, is_completed: newStatus, body: updatedBody } : i));
-    await supabase.from('items').update({ is_completed: newStatus, body: updatedBody }).eq('id', id);
+    const { error } = await supabase.from('items').update({ is_completed: newStatus, body: updatedBody }).eq('id', id);
+    if (error) setItems(prevItems);
   };
 
   const deleteItem = async (id: string) => {
+    const prevItems = items;
     setItems(items.filter(i => i.id !== id));
-    await supabase.from('items').delete().eq('id', id);
+    const { error } = await supabase.from('items').delete().eq('id', id);
+    if (error) setItems(prevItems);
   };
 
   const startEdit = (item: TodoItem) => {

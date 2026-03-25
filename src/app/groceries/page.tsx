@@ -18,9 +18,21 @@ export default function GroceriesPage() {
   const [costcoInput, setCostcoInput] = useState('');
   const [asianInput, setAsianInput] = useState('');
 
+  const loadItems = async () => {
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) return;
+
+    const { data } = await supabase.from('items')
+      .select('*')
+      .eq('type', 'grocery')
+      .order('created_at', { ascending: true });
+
+    if (data) setItems(data as any);
+  };
+
   useEffect(() => {
     loadItems();
-    
+
     const channel = supabase.channel('realtime:groceries')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.grocery" }, payload => {
         loadItems();
@@ -30,49 +42,48 @@ export default function GroceriesPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  const loadItems = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
-    
-    const { data } = await supabase.from('items')
-      .select('*')
-      .eq('type', 'grocery')
-      .order('created_at', { ascending: true });
-      
-    if (data) setItems(data as any);
-  };
-
   const addItem = async (store: StoreType) => {
     let text = '';
     if (store === 'regular') text = regularInput.trim();
     if (store === 'costco') text = costcoInput.trim();
     if (store === 'asian') text = asianInput.trim();
-    
+
     if (!text) return;
-    
+
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
+    const prevRegular = regularInput, prevCostco = costcoInput, prevAsian = asianInput;
     if (store === 'regular') setRegularInput('');
     if (store === 'costco') setCostcoInput('');
     if (store === 'asian') setAsianInput('');
 
-    await supabase.from('items').insert({
+    const { error } = await supabase.from('items').insert({
       type: 'grocery',
       title: text,
       body: { store },
       user_id: userData.user.id
     });
+
+    if (error) {
+      if (store === 'regular') setRegularInput(prevRegular);
+      if (store === 'costco') setCostcoInput(prevCostco);
+      if (store === 'asian') setAsianInput(prevAsian);
+    }
   };
 
   const toggleItem = async (id: string, currentStatus: boolean) => {
+    const prevItems = items;
     setItems(items.map(i => i.id === id ? { ...i, is_completed: !currentStatus } : i));
-    await supabase.from('items').update({ is_completed: !currentStatus }).eq('id', id);
+    const { error } = await supabase.from('items').update({ is_completed: !currentStatus }).eq('id', id);
+    if (error) setItems(prevItems);
   };
 
   const deleteItem = async (id: string) => {
+    const prevItems = items;
     setItems(items.filter(i => i.id !== id));
-    await supabase.from('items').delete().eq('id', id);
+    const { error } = await supabase.from('items').delete().eq('id', id);
+    if (error) setItems(prevItems);
   };
 
   const regularItems = items.filter(i => i.body?.store === 'regular' || !i.body?.store);

@@ -75,10 +75,10 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
           <button type="submit" className="btn mb-4">
             {isSignUp ? 'Sign Up' : 'Sign In'}
           </button>
-          
-          <button 
-            type="button" 
-            className="btn btn-secondary" 
+
+          <button
+            type="button"
+            className="btn btn-secondary"
             onClick={() => { setIsSignUp(!isSignUp); setMsg(''); }}
           >
             {isSignUp ? 'Already have an account? Sign In' : 'Need an account? Sign Up'}

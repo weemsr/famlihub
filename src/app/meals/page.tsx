@@ -45,14 +45,6 @@ export default function MealsPage() {
   const [mealNote, setMealNote] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    loadData();
-    const channel = supabase.channel('realtime:meals')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.meal" }, () => loadData())
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, []);
-
   const loadData = async () => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
@@ -65,6 +57,14 @@ export default function MealsPage() {
     if (mealsRes.data) setMeals(mealsRes.data as any);
     if (recipesRes.data) setRecipes(recipesRes.data as any);
   };
+
+  useEffect(() => {
+    loadData();
+    const channel = supabase.channel('realtime:meals')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.meal" }, () => loadData())
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, []);
 
   const getWeekDays = (offset: number) => {
     const d = new Date();
@@ -106,23 +106,33 @@ export default function MealsPage() {
   const saveMeal = async () => {
     if (!selectedRecipeId && !customName.trim()) return;
     setLoading(true);
-    
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
 
-    await supabase.from('items').insert({
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) { setLoading(false); return; }
+
+    const newBody = {
+      day: activeDay,
+      dayLabel: activeDayLabel,
+      mealId: activeMeal,
+      recipeId: selectedRecipeId,
+      customName: customName.trim(),
+      note: mealNote.trim()
+    };
+
+    // Delete any existing meal for this day+slot to prevent duplicates
+    const existing = meals.filter(m => m.body && (m.body.day === activeDay) && m.body.mealId === activeMeal);
+    if (existing.length > 0) {
+      await supabase.from('items').delete().in('id', existing.map(m => m.id));
+    }
+
+    const { error } = await supabase.from('items').insert({
       type: 'meal',
       title: `${activeDay}-${activeMeal}`,
-      body: {
-        day: activeDay,
-        dayLabel: activeDayLabel,
-        mealId: activeMeal,
-        recipeId: selectedRecipeId,
-        customName: customName.trim(),
-        note: mealNote.trim()
-      },
+      body: newBody,
       user_id: userData.user.id
     });
+
+    if (error) console.error('Failed to save meal:', error.message);
 
     setIsModalOpen(false);
     setLoading(false);
@@ -130,8 +140,10 @@ export default function MealsPage() {
   };
 
   const removeMeal = async (id: string) => {
+    const prevMeals = meals;
     setMeals(meals.filter(m => m.id !== id));
-    await supabase.from('items').delete().eq('id', id);
+    const { error } = await supabase.from('items').delete().eq('id', id);
+    if (error) setMeals(prevMeals);
   };
 
   return (

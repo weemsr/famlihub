@@ -28,8 +28,37 @@ function flattenInstructions(steps: any[]): string[] {
   return result;
 }
 
+function isUrlSafe(input: string): boolean {
+  let parsed: URL;
+  try {
+    parsed = new URL(input);
+  } catch {
+    return false;
+  }
+  if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
+  const hostname = parsed.hostname.toLowerCase();
+  // Block private/internal ranges and metadata endpoints
+  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') return false;
+  if (hostname.endsWith('.local') || hostname.endsWith('.internal')) return false;
+  if (hostname === '169.254.169.254') return false; // Cloud metadata
+  if (hostname === 'metadata.google.internal') return false;
+  // Block private IP ranges
+  const parts = hostname.split('.').map(Number);
+  if (parts.length === 4 && parts.every(n => !isNaN(n))) {
+    if (parts[0] === 10) return false;
+    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
+    if (parts[0] === 192 && parts[1] === 168) return false;
+    if (parts[0] === 0) return false;
+  }
+  return true;
+}
+
 export async function fetchRecipeFromUrl(url: string) {
   try {
+    if (!isUrlSafe(url)) {
+      return { success: false, error: 'Invalid or blocked URL. Only public http/https URLs are allowed.' };
+    }
+
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 

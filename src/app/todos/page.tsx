@@ -9,7 +9,6 @@ interface TodoItem {
   is_completed: boolean;
   user_id?: string;
   body?: any;
-  updated_at?: string;
 }
 
 const CATEGORIES = [
@@ -67,9 +66,11 @@ export default function TodosPage() {
   };
 
   const toggleItem = async (id: string, currentStatus: boolean) => {
-    const now = new Date().toISOString();
-    setItems(items.map(i => i.id === id ? { ...i, is_completed: !currentStatus, updated_at: now } : i));
-    await supabase.from('items').update({ is_completed: !currentStatus, updated_at: now }).eq('id', id);
+    const newStatus = !currentStatus;
+    const item = items.find(i => i.id === id);
+    const updatedBody = { ...item?.body, completedAt: newStatus ? new Date().toISOString() : null };
+    setItems(items.map(i => i.id === id ? { ...i, is_completed: newStatus, body: updatedBody } : i));
+    await supabase.from('items').update({ is_completed: newStatus, body: updatedBody }).eq('id', id);
   };
 
   const deleteItem = async (id: string) => {
@@ -250,9 +251,9 @@ export default function TodosPage() {
                       <span className="checkbox-label completed" style={{ textDecoration: 'line-through', color: 'var(--text-secondary)' }}>
                         {item.title}
                       </span>
-                      {item.updated_at && (
+                      {item.body?.completedAt && (
                         <span style={{ fontSize: '0.75rem', color: '#a0a0a0', whiteSpace: 'nowrap', marginLeft: 12 }}>
-                          {new Date(item.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                          {new Date(item.body.completedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}
                     </div>

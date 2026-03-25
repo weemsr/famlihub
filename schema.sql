@@ -12,15 +12,15 @@ CREATE TABLE items (
 
 ALTER TABLE items ENABLE ROW LEVEL SECURITY;
 
--- Since this is a shared family app, we will let any logged-in family member access all items.
-CREATE POLICY "Family can read all items" 
-  ON items FOR SELECT USING (auth.role() = 'authenticated');
+-- Each user can only access their own items
+CREATE POLICY "Users can read own items"
+  ON items FOR SELECT USING (auth.uid() = user_id);
 
-CREATE POLICY "Family can insert items" 
-  ON items FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+CREATE POLICY "Users can insert own items"
+  ON items FOR INSERT WITH CHECK (auth.uid() = user_id);
 
-CREATE POLICY "Family can update items" 
-  ON items FOR UPDATE USING (auth.role() = 'authenticated');
+CREATE POLICY "Users can update own items"
+  ON items FOR UPDATE USING (auth.uid() = user_id);
 
-CREATE POLICY "Family can delete items" 
-  ON items FOR DELETE USING (auth.role() = 'authenticated');
+CREATE POLICY "Users can delete own items"
+  ON items FOR DELETE USING (auth.uid() = user_id);

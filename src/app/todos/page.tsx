@@ -56,10 +56,12 @@ export default function TodosPage() {
     setItems(prev => [{ id: tempId, title, is_completed: false, body: { category: cat } }, ...prev]);
     setInput('');
 
+    const { data: userData } = await supabase.auth.getUser();
     const { error } = await supabase.from('items').insert({
       title,
       type: 'todo',
-      body: { category: cat }
+      body: { category: cat },
+      user_id: userData?.user?.id
     });
 
     if (error) {

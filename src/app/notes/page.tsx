@@ -24,13 +24,13 @@ export default function NotesPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
     const { data } = await supabase.from('items').select('*').eq('type', 'note').order('created_at', { ascending: false });
-    if (data) setItems(data as any);
+    if (data) setItems(data as unknown as NoteItem[]);
   };
 
   useEffect(() => {
     loadItems();
     const channel = supabase.channel('realtime:notes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.note" }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.note" }, () => {
         loadItems();
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
@@ -55,7 +55,7 @@ export default function NotesPage() {
     setBody('');
     setIsCreating(false);
     if (data) {
-      setItems(prev => [data as any, ...prev]);
+      setItems(prev => [data as unknown as NoteItem, ...prev]);
       setExpandedId(data.id);
     }
   };

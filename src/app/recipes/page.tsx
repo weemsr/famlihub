@@ -1,18 +1,16 @@
 "use client";
 import { useState, useEffect } from 'react';
+import Image from 'next/image';
 import { Search, Save, ChevronDown, ChevronUp, Trash2, Edit2 } from 'lucide-react';
 import { fetchRecipeFromUrl } from '@/app/actions/recipe';
 import { supabase } from '@/lib/supabase';
+import { safeImageUrl, safeHttpUrl } from '@/lib/url';
+import { asStringArray, type RecipeBody } from '@/lib/types';
 
 interface RecipeItem {
   id: string;
   title: string;
-  body: {
-    ingredients: string[];
-    instructions: string[];
-    image: string;
-    sourceUrl: string;
-  };
+  body: RecipeBody;
 }
 
 const IngredientRow = ({ ing }: { ing: string }) => {
@@ -187,14 +185,14 @@ export default function RecipesPage() {
     e.stopPropagation();
     setEditingId(recipe.id);
     setEditTitle(recipe.title);
-    
+
     // Strip HTML manually from scraper artifacts before handing to raw textarea
-    const rawIngs = Array.isArray(recipe.body.ingredients) ? recipe.body.ingredients : (typeof recipe.body.ingredients === 'string' ? [recipe.body.ingredients] : []);
-    const rawInsts = Array.isArray(recipe.body.instructions) ? recipe.body.instructions : (typeof recipe.body.instructions === 'string' ? [recipe.body.instructions] : []);
-    
-    const cleanIngs = rawIngs.map(i => typeof i === 'string' ? i.replace(/<[^>]*>?/gm, '') : '');
-    const cleanInsts = rawInsts.map(i => typeof i === 'string' ? i.replace(/<[^>]*>?/gm, '') : '');
-    
+    const rawIngs = asStringArray(recipe.body?.ingredients);
+    const rawInsts = asStringArray(recipe.body?.instructions);
+
+    const cleanIngs = rawIngs.map(i => i.replace(/<[^>]*>?/gm, ''));
+    const cleanInsts = rawInsts.map(i => i.replace(/<[^>]*>?/gm, ''));
+
     setEditIngredients(cleanIngs.join('\n'));
     setEditInstructions(cleanInsts.join('\n'));
     setExpandedId(recipe.id);
@@ -347,21 +345,23 @@ export default function RecipesPage() {
         {filtered.length === 0 && <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>No recipes found.</div>}
         
         {filtered.map(recipe => {
-          const body = recipe.body || {} as any;
+          const body: RecipeBody = recipe.body || {};
           const isExpanded = expandedId === recipe.id;
           const isEditing = editingId === recipe.id;
-          
+          const safeImage = safeImageUrl(body.image);
+          const safeSource = safeHttpUrl(body.sourceUrl);
+
           return (
             <div key={recipe.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
-              <div 
+              <div
                 style={{ padding: '20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 onClick={() => !isEditing && setExpandedId(isExpanded ? null : recipe.id)}
               >
                 <div style={{ flex: 1, paddingRight: 16 }}>
                   {isEditing ? (
-                    <input 
-                      type="text" 
-                      className="input" 
+                    <input
+                      type="text"
+                      className="input"
                       onClick={e => e.stopPropagation()}
                       value={editTitle}
                       onChange={e => setEditTitle(e.target.value)}
@@ -370,8 +370,8 @@ export default function RecipesPage() {
                   ) : (
                     <>
                       <h3 style={{ marginBottom: 4 }}>{recipe.title}</h3>
-                      {body.sourceUrl && (
-                        <a href={body.sourceUrl} target="_blank" rel="noreferrer" className="text-sm" style={{ color: 'var(--accent-color)', fontWeight: 600 }} onClick={e => e.stopPropagation()}>
+                      {safeSource && (
+                        <a href={safeSource} target="_blank" rel="noopener noreferrer nofollow" className="text-sm" style={{ color: 'var(--accent-color)', fontWeight: 600 }} onClick={e => e.stopPropagation()}>
                           Original Link
                         </a>
                       )}
@@ -406,12 +406,23 @@ export default function RecipesPage() {
               
               {isExpanded && (
                 <div style={{ padding: '0 20px 24px 20px' }}>
-                  {body.image && !isEditing && <img src={body.image} alt={recipe.title} style={{ width: '100%', borderRadius: 16, marginBottom: 20, maxHeight: 250, objectFit: 'cover' }} />}
-                  
+                  {safeImage && !isEditing && (
+                    <div style={{ position: 'relative', width: '100%', height: 250, borderRadius: 16, overflow: 'hidden', marginBottom: 20 }}>
+                      <Image
+                        src={safeImage}
+                        alt={recipe.title}
+                        fill
+                        sizes="(max-width: 800px) 100vw, 800px"
+                        style={{ objectFit: 'cover' }}
+                        unoptimized
+                      />
+                    </div>
+                  )}
+
                   <h3 style={{ marginTop: 8, marginBottom: 12 }}>Ingredients</h3>
                   {isEditing ? (
-                    <textarea 
-                      className="input mb-4" 
+                    <textarea
+                      className="input mb-4"
                       style={{ height: 200, resize: 'none' }}
                       value={editIngredients}
                       onChange={e => setEditIngredients(e.target.value)}
@@ -419,14 +430,14 @@ export default function RecipesPage() {
                     />
                   ) : (
                     <ul style={{ paddingLeft: 0, listStyle: 'none', marginBottom: 24, color: 'var(--text-primary)' }}>
-                      {(Array.isArray(body.ingredients) ? body.ingredients : (typeof body.ingredients === 'string' ? [body.ingredients] : [])).map((ing: any, i: number) => <IngredientRow key={i} ing={String(ing)} />)}
+                      {asStringArray(body.ingredients).map((ing, i) => <IngredientRow key={i} ing={ing} />)}
                     </ul>
                   )}
-                  
+
                   <h3 style={{ marginBottom: 12 }}>Instructions</h3>
                   {isEditing ? (
-                    <textarea 
-                      className="input mb-4" 
+                    <textarea
+                      className="input mb-4"
                       style={{ height: 250, resize: 'none' }}
                       value={editInstructions}
                       onChange={e => setEditInstructions(e.target.value)}
@@ -434,7 +445,7 @@ export default function RecipesPage() {
                     />
                   ) : (
                     <ol style={{ paddingLeft: 24, color: 'var(--text-primary)' }}>
-                      {(Array.isArray(body.instructions) ? body.instructions : (typeof body.instructions === 'string' ? [body.instructions] : [])).map((inst: any, i: number) => <li key={i} style={{marginBottom: 12}}>{String(inst).replace(/<[^>]*>?/gm, '')}</li>)}
+                      {asStringArray(body.instructions).map((inst, i) => <li key={i} style={{ marginBottom: 12 }}>{inst.replace(/<[^>]*>?/gm, '')}</li>)}
                     </ol>
                   )}
                 </div>

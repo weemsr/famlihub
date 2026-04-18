@@ -2,15 +2,16 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import type { GroceryBody, GroceryStore } from '@/lib/types';
 
 interface GroceryItem {
   id: string;
   title: string;
   is_completed: boolean;
-  body: { store: string };
+  body: GroceryBody;
 }
 
-type StoreType = 'regular' | 'costco' | 'asian';
+type StoreType = GroceryStore;
 
 export default function GroceriesPage() {
   const [items, setItems] = useState<GroceryItem[]>([]);
@@ -27,14 +28,14 @@ export default function GroceriesPage() {
       .eq('type', 'grocery')
       .order('created_at', { ascending: true });
 
-    if (data) setItems(data as any);
+    if (data) setItems(data as unknown as GroceryItem[]);
   };
 
   useEffect(() => {
     loadItems();
 
     const channel = supabase.channel('realtime:groceries')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.grocery" }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.grocery" }, () => {
         loadItems();
       })
       .subscribe();

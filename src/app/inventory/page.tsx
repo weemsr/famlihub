@@ -16,13 +16,13 @@ export default function InventoryPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
     const { data } = await supabase.from('items').select('*').eq('type', 'inventory').order('created_at', { ascending: false });
-    if (data) setItems(data as any);
+    if (data) setItems(data as unknown as InventoryItem[]);
   };
 
   useEffect(() => {
     loadItems();
     const channel = supabase.channel('realtime:inventory')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.inventory" }, payload => {
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.inventory" }, () => {
         loadItems();
       }).subscribe();
     return () => { supabase.removeChannel(channel); };

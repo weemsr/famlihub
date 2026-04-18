@@ -1,36 +1,77 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# FamLi Hub
 
-## Getting Started
+A personal family-management web app: shared groceries, recipe book with URL
+importer, meal planner, to-do, whiteboard notes, and pantry inventory.
 
-First, run the development server:
+Built with [Next.js 16](https://nextjs.org) (App Router, Turbopack),
+[React 19](https://react.dev), [TypeScript](https://www.typescriptlang.org),
+and [Supabase](https://supabase.com) (Postgres + Auth + Realtime).
+
+## Stack
+
+- **Next.js 16** (App Router, server actions)
+- **React 19**
+- **Supabase** — Postgres, email/password auth, Realtime
+- **Cheerio** — server-side recipe page parsing
+- **lucide-react** — icons
+
+## Local setup
 
 ```bash
+git clone <this-repo>
+cd Antigravity
+npm install
+cp .env.example .env.local   # then fill in your Supabase URL + anon key
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+The app runs at [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Environment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+| Variable                        | Description                                    |
+| ------------------------------- | ---------------------------------------------- |
+| `NEXT_PUBLIC_SUPABASE_URL`      | Supabase project URL (Project Settings → API). |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase publishable/anon key.                 |
 
-## Learn More
+## Database
 
-To learn more about Next.js, take a look at the following resources:
+A single `items` table with a polymorphic `type` + JSONB `body` design, plus
+per-user row-level security. Full schema + RLS policies are in
+[`schema.sql`](./schema.sql). Run it in the Supabase SQL editor before first
+use.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+Each signed-in user only sees their own rows (`auth.uid() = user_id`).
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Deploy
 
-## Deploy on Vercel
+Pushed via the Vercel CLI:
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+```bash
+npx vercel --prod
+```
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Production: [famlihub.vercel.app](https://famlihub.vercel.app)
+
+## Layout
+
+```
+src/
+  app/
+    actions/recipe.ts     # Server action: fetch + parse recipe URLs
+    calendar/             # Month-view calendar (placeholder)
+    groceries/            # Regular / Costco / Asian lists
+    inventory/            # Pantry staples
+    meals/                # Weekly planner, 3 slots × 7 days
+    notes/                # Whiteboard notes
+    recipes/              # URL import, manual create, search
+    todos/                # 3-category to-do lists
+    page.tsx              # Home dashboard (real-time counts)
+  components/
+    AuthProvider.tsx      # Email/password sign-in gate
+    BottomNav.tsx         # Mobile-first bottom nav
+  lib/
+    supabase.ts           # Supabase client singleton
+    types.ts              # Shared Item/body interfaces
+    url.ts                # URL safety helpers (image + link)
+```

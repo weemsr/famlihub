@@ -2,13 +2,14 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, FolderPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import type { TodoBody } from '@/lib/types';
 
 interface TodoItem {
   id: string;
   title: string;
   is_completed: boolean;
   user_id?: string;
-  body?: any;
+  body?: TodoBody;
 }
 
 const CATEGORIES = [
@@ -25,15 +26,39 @@ export default function TodosPage() {
   const [editTitle, setEditTitle] = useState('');
   const [showCompleted, setShowCompleted] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
+  const [moverOpenId, setMoverOpenId] = useState<string | null>(null);
+
+  // Close the category mover popover when clicking anywhere else.
+  useEffect(() => {
+    if (!moverOpenId) return;
+    const onClick = () => setMoverOpenId(null);
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setMoverOpenId(null);
+    };
+    // Defer so the initial opening click doesn't immediately close it.
+    const t = setTimeout(() => {
+      window.addEventListener('click', onClick);
+      window.addEventListener('keydown', onKey);
+    }, 0);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('click', onClick);
+      window.removeEventListener('keydown', onKey);
+    };
+  }, [moverOpenId]);
 
   const toggleCategory = (cat: string) => {
     setCollapsedCategories(prev => ({ ...prev, [cat]: !prev[cat] }));
   };
 
   const handleMoveItem = async (id: string, targetCategory: string) => {
-    setItems(items.map(i => i.id === id ? { ...i, body: { ...i.body, category: targetCategory } } : i));
+    setMoverOpenId(null);
     const item = items.find(i => i.id === id);
-    if (item) await supabase.from('items').update({ body: { ...item.body, category: targetCategory } }).eq('id', id);
+    const prevItems = items;
+    const updatedBody: TodoBody = { ...(item?.body || {}), category: targetCategory };
+    setItems(items.map(i => i.id === id ? { ...i, body: updatedBody } : i));
+    const { error } = await supabase.from('items').update({ body: updatedBody }).eq('id', id);
+    if (error) setItems(prevItems);
   };
 
   const loadItems = async () => {
@@ -167,16 +192,68 @@ export default function TodosPage() {
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, paddingRight: 16 }}>
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-                           <button className="btn" style={{ padding: '4px', background: 'transparent', color: 'var(--text-secondary)' }}>
+                           <button
+                             className="btn"
+                             type="button"
+                             aria-label={`Move "${item.title}" to another category`}
+                             aria-haspopup="menu"
+                             aria-expanded={moverOpenId === item.id}
+                             style={{ padding: '4px', background: 'transparent', color: 'var(--text-secondary)', width: 'auto' }}
+                             onClick={(e) => {
+                               e.stopPropagation();
+                               setMoverOpenId(moverOpenId === item.id ? null : item.id);
+                             }}
+                           >
                              <FolderPlus size={16} />
                            </button>
-                           <select 
-                             style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%', opacity: 0 }}
-                             value={item.body?.category || CATEGORIES[0]}
-                             onChange={(e) => handleMoveItem(item.id, e.target.value)}
-                           >
-                             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
-                           </select>
+                           {moverOpenId === item.id && (
+                             <ul
+                               role="menu"
+                               onClick={e => e.stopPropagation()}
+                               style={{
+                                 position: 'absolute',
+                                 top: 'calc(100% + 6px)',
+                                 left: 0,
+                                 zIndex: 10,
+                                 background: 'var(--surface-color)',
+                                 border: '1px solid rgba(0,0,0,0.08)',
+                                 borderRadius: 12,
+                                 boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
+                                 listStyle: 'none',
+                                 padding: 4,
+                                 margin: 0,
+                                 minWidth: 200,
+                               }}
+                             >
+                               {CATEGORIES.map(c => {
+                                 const current = (item.body?.category || CATEGORIES[0]) === c;
+                                 return (
+                                   <li key={c} role="none">
+                                     <button
+                                       type="button"
+                                       role="menuitem"
+                                       onClick={() => handleMoveItem(item.id, c)}
+                                       disabled={current}
+                                       style={{
+                                         width: '100%',
+                                         textAlign: 'left',
+                                         padding: '8px 12px',
+                                         borderRadius: 8,
+                                         background: current ? 'var(--surface-hover)' : 'transparent',
+                                         color: current ? 'var(--text-secondary)' : 'var(--text-primary)',
+                                         border: 'none',
+                                         cursor: current ? 'default' : 'pointer',
+                                         fontSize: '0.9rem',
+                                         fontWeight: 500,
+                                       }}
+                                     >
+                                       {c}{current ? ' ✓' : ''}
+                                     </button>
+                                   </li>
+                                 );
+                               })}
+                             </ul>
+                           )}
                         </div>
                       
                       <input 

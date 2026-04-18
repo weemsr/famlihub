@@ -1,27 +1,40 @@
 "use server";
 import * as cheerio from 'cheerio';
+import { safeImageUrl, safeHttpUrl } from '@/lib/url';
+
+// Narrow types for the shapes we read out of scraped JSON. The scraper
+// traverses untyped JSON-LD / Next.js data, so we keep these loose but
+// documented rather than pretending the input is typed.
+type SanityChild = { text?: string };
+type SanityBlock = { children?: SanityChild[] };
+type HowToStep = { '@type'?: string; text?: string; itemListElement?: HowToStep[] } | string;
 
 // Extract text from Sanity portable text blocks (used by madewithlau, etc.)
-function extractSanityText(blocks: any[]): string {
+function extractSanityText(blocks: unknown): string {
   if (!Array.isArray(blocks)) return '';
-  return blocks
-    .filter((b: any) => b.children)
-    .map((b: any) => b.children.map((c: any) => c.text || '').join(''))
+  return (blocks as SanityBlock[])
+    .filter(b => Array.isArray(b?.children))
+    .map(b => (b.children as SanityChild[]).map(c => c.text || '').join(''))
     .join(' ')
     .trim();
 }
 
 // Flatten HowToSection / HowToStep instructions into a flat string array
-function flattenInstructions(steps: any[]): string[] {
+function flattenInstructions(steps: HowToStep[]): string[] {
   const result: string[] = [];
   for (const step of steps) {
+    if (typeof step === 'string') {
+      const text = step.trim();
+      if (text) result.push(text);
+      continue;
+    }
     if (step['@type'] === 'HowToSection' && Array.isArray(step.itemListElement)) {
       for (const sub of step.itemListElement) {
-        const text = (sub.text || '').trim();
+        const text = (typeof sub === 'string' ? sub : sub.text || '').trim();
         if (text) result.push(text);
       }
     } else {
-      const text = (step.text || (typeof step === 'string' ? step : '')).trim();
+      const text = (step.text || '').trim();
       if (text) result.push(text);
     }
   }
@@ -79,6 +92,9 @@ export async function fetchRecipeFromUrl(url: string) {
     const html = await res.text();
     const $ = cheerio.load(html);
 
+    // Scraper internals traverse deeply untyped JSON from arbitrary sites;
+    // keep this `any` and validate at the module boundary (sanitized return).
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     let recipeData: any = null;
 
     let titleRaw = $('meta[property="og:title"]').attr('content') || $('h1').first().text().trim() || 'Unknown Recipe';
@@ -260,9 +276,16 @@ export async function fetchRecipeFromUrl(url: string) {
        throw new Error("Could not extract ingredients. The site might be using an unconventional layout or blocking automated analysis.");
     }
 
-    return { success: true, recipe: { title, ingredients, instructions, image, sourceUrl: url } };
+    // Sanitize URLs before they enter client state. `image` comes from
+    // scraped pages and could be javascript:/data:/file:; `url` was
+    // already validated by isUrlSafe above but we still normalize.
+    const safeImage = safeImageUrl(image) || '';
+    const safeSource = safeHttpUrl(url) || '';
 
-  } catch (error: any) {
-    return { success: false, error: error.message };
+    return { success: true, recipe: { title, ingredients, instructions, image: safeImage, sourceUrl: safeSource } };
+
+  } catch (error: unknown) {
+    const message = error instanceof Error ? error.message : 'Failed to import recipe.';
+    return { success: false, error: message };
   }
 }

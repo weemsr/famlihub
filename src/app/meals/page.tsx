@@ -1,7 +1,10 @@
 "use client";
-import { useState, useEffect } from 'react';
-import { Plus, Trash2, Calendar, Coffee, Sun, Moon } from 'lucide-react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import Image from 'next/image';
+import { Plus, Trash2, Coffee, Sun, Moon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { safeImageUrl } from '@/lib/url';
+import type { MealBody, RecipeBody } from '@/lib/types';
 
 const MEAL_SLOTS = [
   { id: 'Breakfast', icon: Coffee, color: '#f59e0b' },
@@ -11,22 +14,13 @@ const MEAL_SLOTS = [
 
 interface MealItem {
   id: string;
-  body: {
-    day: string;
-    dayLabel?: string;
-    mealId: string;
-    recipeId: string;
-    customName: string;
-    note?: string;
-  };
+  body: MealBody;
 }
 
 interface RecipeItem {
   id: string;
   title: string;
-  body: {
-    image?: string;
-  };
+  body: RecipeBody;
 }
 
 export default function MealsPage() {
@@ -45,7 +39,7 @@ export default function MealsPage() {
   const [mealNote, setMealNote] = useState('');
   const [loading, setLoading] = useState(false);
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
@@ -54,17 +48,51 @@ export default function MealsPage() {
       supabase.from('items').select('*').eq('type', 'recipe').order('created_at', { ascending: false })
     ]);
 
-    if (mealsRes.data) setMeals(mealsRes.data as any);
-    if (recipesRes.data) setRecipes(recipesRes.data as any);
-  };
+    if (mealsRes.data) setMeals(mealsRes.data as unknown as MealItem[]);
+    if (recipesRes.data) setRecipes(recipesRes.data as unknown as RecipeItem[]);
+  }, []);
+
+  // Ref so the realtime subscription never captures a stale callback.
+  const loadDataRef = useRef(loadData);
+  useEffect(() => { loadDataRef.current = loadData; }, [loadData]);
 
   useEffect(() => {
-    loadData();
+    loadDataRef.current();
     const channel = supabase.channel('realtime:meals')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.meal" }, () => loadData())
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: "type=eq.meal" }, () => loadDataRef.current())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);
+
+  // Close the modal on Escape.
+  useEffect(() => {
+    if (!isModalOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setIsModalOpen(false);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [isModalOpen]);
+
+  // O(1) lookup maps for meals and recipes (replaces nested .find() in render loop).
+  const mealBySlot = useMemo(() => {
+    const m = new Map<string, MealItem>();
+    for (const meal of meals) {
+      if (!meal.body) continue;
+      const day = meal.body.day;
+      const slot = meal.body.mealId;
+      if (!day || !slot) continue;
+      // First write wins so deterministic order matches the previous .find() behavior.
+      if (!m.has(`${day}:${slot}`)) m.set(`${day}:${slot}`, meal);
+    }
+    return m;
+  }, [meals]);
+
+  const recipeById = useMemo(() => {
+    const m = new Map<string, RecipeItem>();
+    for (const r of recipes) m.set(r.id, r);
+    return m;
+  }, [recipes]);
 
   const getWeekDays = (offset: number) => {
     const d = new Date();
@@ -190,16 +218,20 @@ export default function MealsPage() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {MEAL_SLOTS.map((slot, i) => {
               const Icon = slot.icon;
-              // Support legacy 'Monday' entries gracefully
-              const scheduledMeal = meals.find(m => m.body && (m.body.day === dayObj.dbKey || m.body.day === dayObj.dayName) && m.body.mealId === slot.id);
-              const linkedRecipe = scheduledMeal?.body?.recipeId ? recipes.find(r => r.id === scheduledMeal.body.recipeId) : null;
-              
+              // Support legacy entries keyed by day name ('Monday') by trying both.
+              const scheduledMeal =
+                mealBySlot.get(`${dayObj.dbKey}:${slot.id}`) ||
+                mealBySlot.get(`${dayObj.dayName}:${slot.id}`) ||
+                null;
+              const linkedRecipe = scheduledMeal?.body?.recipeId ? recipeById.get(scheduledMeal.body.recipeId) ?? null : null;
+              const thumb = safeImageUrl(linkedRecipe?.body?.image);
+
               return (
-                <div key={slot.id} style={{ 
+                <div key={slot.id} style={{
                   display: 'flex', alignItems: 'center', padding: '16px 20px',
                   borderBottom: i < MEAL_SLOTS.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none'
                 }}>
-                  
+
                   {/* Slot Icon & Label */}
                   <div style={{ minWidth: 110, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
                     <div style={{ padding: 8, backgroundColor: `${slot.color}15`, borderRadius: 12, color: slot.color }}>
@@ -213,8 +245,15 @@ export default function MealsPage() {
                     {scheduledMeal ? (
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-                          {linkedRecipe?.body.image && (
-                            <img src={linkedRecipe.body.image} alt="meal" style={{ width: 40, height: 40, borderRadius: 8, objectFit: 'cover' }} />
+                          {thumb && (
+                            <Image
+                              src={thumb}
+                              alt="meal"
+                              width={40}
+                              height={40}
+                              style={{ borderRadius: 8, objectFit: 'cover' }}
+                              unoptimized
+                            />
                           )}
                           <div style={{ display: 'flex', flexDirection: 'column' }}>
                             <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
@@ -227,7 +266,7 @@ export default function MealsPage() {
                             )}
                           </div>
                         </div>
-                        <button 
+                        <button
                           style={{ padding: 8, background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
                           onClick={() => removeMeal(scheduledMeal.id)}
                         >

@@ -167,6 +167,8 @@ export default function CalendarPage() {
       const day = new Date(year, month, d);
       cells.push({ iso: isoDay(day), dayNum: d });
     }
+    // Pad trailing blanks so the last row always has 7 cells (no visual gap).
+    while (cells.length % 7 !== 0) cells.push({ iso: null, dayNum: null });
     return cells;
   }, [cursor]);
 
@@ -276,7 +278,7 @@ export default function CalendarPage() {
   );
 
   return (
-    <div style={{ paddingBottom: 60 }}>
+    <div>
       <div className="flex items-center justify-between mb-4">
         <h1 style={{ marginBottom: 0 }}>Calendar 📆</h1>
         <button
@@ -301,14 +303,14 @@ export default function CalendarPage() {
           </button>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, textAlign: 'center', fontWeight: 700, marginBottom: 8, fontSize: '0.75rem', color: 'var(--text-secondary)', letterSpacing: 0.5 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4, textAlign: 'center', fontWeight: 700, marginBottom: 6, fontSize: '0.72rem', color: 'var(--text-secondary)', letterSpacing: 0.6 }}>
           {['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'].map(d => <div key={d}>{d}</div>)}
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 5 }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4 }}>
           {grid.map((cell, i) => {
             if (!cell.iso || cell.dayNum === null) {
-              return <div key={`blank-${i}`} style={{ aspectRatio: '1 / 1.05' }} />;
+              return <div key={`blank-${i}`} style={{ aspectRatio: '1 / 1' }} aria-hidden />;
             }
             const dayEvents = eventsByDay.get(cell.iso) || [];
             const isToday = cell.iso === todayIso;
@@ -324,8 +326,9 @@ export default function CalendarPage() {
                 aria-pressed={isSelected}
                 style={{
                   position: 'relative',
-                  aspectRatio: '1 / 1.05',
-                  padding: '6px 4px',
+                  aspectRatio: '1 / 1',
+                  maxHeight: 64,
+                  padding: '5px 4px',
                   borderRadius: 10,
                   background: isToday ? 'var(--accent-color)' : 'var(--surface-hover)',
                   color: isToday ? 'white' : 'var(--text-primary)',
@@ -333,45 +336,52 @@ export default function CalendarPage() {
                   outline: isSelected && isToday ? '2px solid var(--surface-color)' : 'none',
                   outlineOffset: isSelected && isToday ? '-4px' : '0',
                   fontWeight: isToday ? 700 : 500,
-                  fontSize: '0.95rem',
+                  fontSize: '0.9rem',
                   cursor: 'pointer',
                   touchAction: 'manipulation',
                   display: 'flex',
                   flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'flex-start',
-                  gap: 4,
+                  alignItems: 'stretch',
+                  justifyContent: 'space-between',
+                  gap: 2,
                   transition: 'transform 0.08s ease, background 0.15s ease',
                 }}
               >
-                <span>{cell.dayNum}</span>
-                {count > 0 && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, width: '80%' }}>
-                    {[0, 1, 2].slice(0, Math.min(count, 3)).map(idx => (
-                      <span
-                        key={idx}
-                        aria-hidden
-                        style={{
-                          height: 3,
-                          borderRadius: 2,
-                          background: isToday ? 'rgba(255,255,255,0.85)' : '#4285F4',
-                          opacity: idx === 0 ? 1 : idx === 1 ? 0.75 : 0.5,
-                        }}
-                      />
-                    ))}
-                    {count > 3 && (
-                      <span style={{
-                        fontSize: '0.62rem',
-                        fontWeight: 700,
-                        color: isToday ? 'rgba(255,255,255,0.9)' : 'var(--text-secondary)',
-                        lineHeight: 1,
-                        marginTop: 1,
-                      }}>
-                        +{count - 3}
-                      </span>
-                    )}
-                  </div>
-                )}
+                {/* Day number — top-centered */}
+                <span style={{ textAlign: 'center', lineHeight: 1.1 }}>{cell.dayNum}</span>
+
+                {/* Event bars — bottom of cell; fixed-height reservation keeps
+                    every cell visually balanced whether or not it has events. */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minHeight: 12, justifyContent: 'flex-end' }}>
+                  {count === 0 ? null : (
+                    <>
+                      {Array.from({ length: Math.min(count, 3) }).map((_, idx) => (
+                        <span
+                          key={idx}
+                          aria-hidden
+                          style={{
+                            height: 3,
+                            borderRadius: 2,
+                            background: isToday ? 'rgba(255,255,255,0.9)' : '#4285F4',
+                            opacity: idx === 0 ? 1 : idx === 1 ? 0.7 : 0.45,
+                          }}
+                        />
+                      ))}
+                      {count > 3 && (
+                        <span style={{
+                          fontSize: '0.6rem',
+                          fontWeight: 700,
+                          color: isToday ? 'rgba(255,255,255,0.95)' : 'var(--text-secondary)',
+                          lineHeight: 1,
+                          textAlign: 'center',
+                          marginTop: 1,
+                        }}>
+                          +{count - 3}
+                        </span>
+                      )}
+                    </>
+                  )}
+                </div>
               </button>
             );
           })}

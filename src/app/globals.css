@@ -50,8 +50,19 @@
   }
 }
 
+/* Tie the browser's color-scheme to the ACTUAL active theme, not "both".
+   Otherwise native form controls (checkboxes, selects, scrollbars) render
+   with the OS's preferred scheme and can appear dark on a light page. */
 html {
-  color-scheme: light dark;
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme]) {
+    color-scheme: dark;
+  }
 }
 
 * {

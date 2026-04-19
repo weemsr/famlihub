@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
-  ChevronLeft, ChevronRight, Info, Link2, RefreshCw, ExternalLink,
+  ChevronLeft, ChevronRight, ChevronUp, ChevronDown, Info, Link2, RefreshCw, ExternalLink,
   MapPin, X, Trash2, Pencil, Check, Plus, CalendarDays,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
@@ -159,7 +159,19 @@ export default function CalendarPage() {
   const [editName, setEditName] = useState('');
   const [editColor, setEditColor] = useState<string>(CALENDAR_DEFAULT_COLOR);
 
+  // Collapse state for the Connected calendars card. Starts collapsed so it
+  // doesn't dominate the screen once calendars are set up. Auto-expands for
+  // users with nothing connected yet so they see the setup flow.
+  const [showCalendarsPanel, setShowCalendarsPanel] = useState(false);
+
   const entries = useMemo(() => entriesFromSetting(googleSetting), [googleSetting]);
+
+  // Auto-expand the calendars panel only when the user hasn't connected
+  // anything yet, so the initial setup flow is immediately visible. Once
+  // connected, default-collapsed (user can expand at any time).
+  useEffect(() => {
+    if (entries.length === 0) setShowCalendarsPanel(true);
+  }, [entries.length]);
 
   const loadData = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
@@ -637,6 +649,31 @@ export default function CalendarPage() {
                 : <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>{selectedDayEvents.map(renderEventRow)}</div>}
             </div>
           )}
+
+          {/* Upcoming (next 14 days) — shown in Month view below the grid. */}
+          {hasAnyCalendar && (
+            <div className="card">
+              <h3 style={{ marginBottom: 12 }}>Upcoming</h3>
+              {upcoming.length === 0 ? (
+                <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
+                  Nothing in the next 14 days.
+                </p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+                  {upcoming.map(({ iso, events }) => (
+                    <div key={iso}>
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, color: 'var(--text-secondary)', marginBottom: 8, letterSpacing: 0.6, textTransform: 'uppercase' }}>
+                        {iso === todayIso ? `Today · ${fmtDayShort(iso)}` : fmtDayShort(iso)}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        {events.map(renderEventRow)}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 
@@ -725,13 +762,42 @@ export default function CalendarPage() {
 
       {/* ========= CONNECTED CALENDARS ========= */}
       <div className="card">
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <Link2 size={20} style={{ color: 'var(--accent-color)' }} />
-          <h3 style={{ marginBottom: 0 }}>
-            {hasAnyCalendar ? 'Connected calendars' : 'Show my Google Calendar here'}
-          </h3>
-        </div>
+        <button
+          type="button"
+          onClick={() => setShowCalendarsPanel(v => !v)}
+          aria-expanded={showCalendarsPanel}
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+            gap: 10,
+            marginBottom: showCalendarsPanel ? 8 : 0,
+            background: 'transparent',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            color: 'inherit',
+            touchAction: 'manipulation',
+          }}
+        >
+          <span style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+            <Link2 size={20} style={{ color: 'var(--accent-color)', flexShrink: 0 }} />
+            <h3 style={{ marginBottom: 0 }}>
+              {hasAnyCalendar ? 'Connected calendars' : 'Show my Google Calendar here'}
+            </h3>
+            {hasAnyCalendar && !showCalendarsPanel && (
+              <span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
+                · {entries.length}
+              </span>
+            )}
+          </span>
+          {showCalendarsPanel
+            ? <ChevronUp size={18} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />
+            : <ChevronDown size={18} style={{ color: 'var(--text-secondary)', flexShrink: 0 }} />}
+        </button>
 
+        {showCalendarsPanel && <>
         {!hasAnyCalendar && (
           <p className="text-sm" style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
             Paste your Google Calendar&apos;s secret iCal URL to start. You can add more calendars later — each gets its own color.
@@ -957,6 +1023,7 @@ export default function CalendarPage() {
         <p className="text-sm" style={{ color: 'var(--text-secondary)', marginTop: 14, marginBottom: 0, fontSize: '0.78rem' }}>
           These URLs are private — keep them out of shared channels. They&apos;re used only by FamLi&apos;s server to fetch events.
         </p>
+        </>}
       </div>
 
     </div>

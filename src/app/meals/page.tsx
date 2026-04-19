@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Image from 'next/image';
-import { Plus, Trash2, Coffee, Sun, Moon } from 'lucide-react';
+import { Plus, Trash2, Coffee, Sun, Moon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { safeImageUrl } from '@/lib/url';
 import type { MealBody, RecipeBody } from '@/lib/types';
@@ -34,7 +34,8 @@ const getTodayKey = () => {
 export default function MealsPage() {
   const [meals, setMeals] = useState<MealItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
-  const [weekOffset, setWeekOffset] = useState<0 | 1>(0);
+  // weekOffset is any integer; 0 = current Mon–Sun, -1 = last week, 1 = next week, etc.
+  const [weekOffset, setWeekOffset] = useState<number>(0);
   const [todayKey, setTodayKey] = useState(getTodayKey);
 
   // Modal State
@@ -138,6 +139,7 @@ export default function MealsPage() {
     // Anchor to local midnight so date math never straddles DST edges weirdly.
     const anchor = new Date();
     anchor.setHours(0, 0, 0, 0);
+    const todayIso = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-${String(anchor.getDate()).padStart(2, '0')}`;
 
     const jsDay = anchor.getDay(); // Sun=0, Mon=1, … Sat=6
     // Distance back to Monday of the current week (Sunday is 6 days after Mon).
@@ -146,7 +148,7 @@ export default function MealsPage() {
     const monday = new Date(anchor);
     monday.setDate(anchor.getDate() - daysSinceMonday + weekOffset * 7);
 
-    return Array.from({ length: 7 }).map((_, i) => {
+    const days = Array.from({ length: 7 }).map((_, i) => {
       const curr = new Date(monday);
       curr.setDate(monday.getDate() + i);
 
@@ -160,11 +162,33 @@ export default function MealsPage() {
         label: `${dayName} - ${monthStr} ${dateNum}`,
         dbKey,
         dayName,
+        isToday: dbKey === todayIso,
       };
     });
+
+    return days;
     // todayKey is intentionally in the deps so the view refreshes at midnight.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekOffset, todayKey]);
+
+  // Compact range label for the toolbar, e.g. "Apr 13 – 19" or "Apr 27 – May 3".
+  const weekRangeLabel = useMemo(() => {
+    if (currentWeek.length < 7) return '';
+    const first = currentWeek[0];
+    const last = currentWeek[6];
+    const [fy, fm, fd] = first.dbKey.split('-').map(Number);
+    const [ly, lm, ld] = last.dbKey.split('-').map(Number);
+    const firstMonth = new Date(fy, fm - 1, fd).toLocaleDateString('en-US', { month: 'short' });
+    const lastMonth = new Date(ly, lm - 1, ld).toLocaleDateString('en-US', { month: 'short' });
+    const sameMonth = firstMonth === lastMonth && fy === ly;
+    return sameMonth ? `${firstMonth} ${fd} – ${ld}` : `${firstMonth} ${fd} – ${lastMonth} ${ld}`;
+  }, [currentWeek]);
+
+  const weekQualifier =
+    weekOffset === 0 ? 'This Week' :
+    weekOffset === 1 ? 'Next Week' :
+    weekOffset === -1 ? 'Last Week' :
+    null;
 
   const openAddModal = (dayKey: string, dayLabel: string, mealId: string) => {
     setActiveDay(dayKey);
@@ -217,43 +241,71 @@ export default function MealsPage() {
 
   return (
     <div style={{ paddingBottom: 60 }}>
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex items-center justify-between mb-4" style={{ gap: 8, flexWrap: 'wrap' }}>
         <h1 style={{ marginBottom: 0 }}>Meals 🍽️</h1>
-        
-        <div style={{ display: 'flex', gap: 4, background: 'var(--surface-hover)', padding: 4, borderRadius: 999 }}>
-          <button 
-            className="btn" 
-            style={{ 
-              padding: '6px 12px', fontSize: '0.85rem', width: 'auto', borderRadius: 999,
-              background: weekOffset === 0 ? 'var(--surface-color)' : 'transparent', 
-              color: weekOffset === 0 ? 'var(--text-primary)' : 'var(--text-secondary)', 
-              boxShadow: weekOffset === 0 ? '0 2px 8px rgba(0,0,0,0.1)' : 'none' 
-            }}
+        {weekOffset !== 0 && (
+          <button
+            type="button"
             onClick={() => setWeekOffset(0)}
+            className="btn"
+            style={{ padding: '6px 12px', fontSize: '0.85rem', width: 'auto', borderRadius: 999, background: 'var(--surface-hover)', color: 'var(--text-primary)', touchAction: 'manipulation' }}
           >
-            This Week
+            Today
           </button>
-          <button 
-            className="btn" 
-            style={{ 
-              padding: '6px 12px', fontSize: '0.85rem', width: 'auto', borderRadius: 999,
-              background: weekOffset === 1 ? 'var(--surface-color)' : 'transparent', 
-              color: weekOffset === 1 ? 'var(--text-primary)' : 'var(--text-secondary)', 
-              boxShadow: weekOffset === 1 ? '0 2px 8px rgba(0,0,0,0.1)' : 'none' 
-            }}
-            onClick={() => setWeekOffset(1)}
-          >
-            Next Week
-          </button>
+        )}
+      </div>
+
+      {/* Week navigator — Monday→Sunday weeks, any offset */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'var(--surface-color)',
+          border: '1px solid var(--hairline)',
+          borderRadius: 16,
+          padding: '8px 10px',
+          marginBottom: 20,
+          gap: 8,
+        }}
+      >
+        <button
+          type="button"
+          onClick={() => setWeekOffset(w => w - 1)}
+          aria-label="Previous week"
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, color: 'var(--text-secondary)', display: 'inline-flex', touchAction: 'manipulation' }}
+        >
+          <ChevronLeft size={20} />
+        </button>
+        <div style={{ textAlign: 'center', flex: 1, minWidth: 0 }}>
+          {weekQualifier && (
+            <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--accent-color)', letterSpacing: 0.6, textTransform: 'uppercase' }}>
+              {weekQualifier}
+            </div>
+          )}
+          <div style={{ fontSize: '1rem', fontWeight: 700, color: 'var(--text-primary)' }}>{weekRangeLabel}</div>
         </div>
+        <button
+          type="button"
+          onClick={() => setWeekOffset(w => w + 1)}
+          aria-label="Next week"
+          style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, color: 'var(--text-secondary)', display: 'inline-flex', touchAction: 'manipulation' }}
+        >
+          <ChevronRight size={20} />
+        </button>
       </div>
 
       {currentWeek.map(dayObj => (
-        <div key={dayObj.dbKey} className="card" style={{ padding: 0, marginBottom: 24, overflow: 'hidden' }}>
-          <div style={{ backgroundColor: 'var(--surface-hover)', padding: '12px 20px', borderBottom: '1px solid var(--hairline)' }}>
+        <div key={dayObj.dbKey} className="card" style={{ padding: 0, marginBottom: 24, overflow: 'hidden', outline: dayObj.isToday ? '2px solid var(--accent-color)' : 'none' }}>
+          <div style={{ backgroundColor: 'var(--surface-hover)', padding: '12px 20px', borderBottom: '1px solid var(--hairline)', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
             <h2 style={{ fontSize: '1.15rem', marginBottom: 0, color: 'var(--text-primary)' }}>
               {dayObj.label}
             </h2>
+            {dayObj.isToday && (
+              <span style={{ fontSize: '0.7rem', fontWeight: 700, letterSpacing: 0.5, textTransform: 'uppercase', color: 'white', background: 'var(--accent-color)', padding: '3px 10px', borderRadius: 999 }}>
+                Today
+              </span>
+            )}
           </div>
           
           <div style={{ display: 'flex', flexDirection: 'column' }}>

@@ -1,30 +1,40 @@
 "use client";
 import { useEffect, useState } from 'react';
-import { Sun, Moon, MonitorSmartphone } from 'lucide-react';
+import { Sun, Moon } from 'lucide-react';
 
-type Theme = 'light' | 'dark' | 'system';
+type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'famli.theme';
 
 function apply(theme: Theme) {
   if (typeof document === 'undefined') return;
-  if (theme === 'system') delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = theme;
+  document.documentElement.dataset.theme = theme;
 }
 
-function read(): Theme {
-  if (typeof window === 'undefined') return 'system';
+function read(): Theme | null {
+  if (typeof window === 'undefined') return null;
   const v = window.localStorage.getItem(STORAGE_KEY);
-  if (v === 'light' || v === 'dark' || v === 'system') return v;
-  return 'system';
+  if (v === 'light' || v === 'dark') return v;
+  return null;
+}
+
+function resolveInitial(): Theme {
+  const stored = read();
+  if (stored) return stored;
+  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
+    return 'dark';
+  }
+  return 'light';
 }
 
 export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('system');
+  const [theme, setTheme] = useState<Theme>('light');
 
-  // Initialize from localStorage after hydration to match the no-flash script.
+  // Initialize after hydration to match the no-flash bootstrap script.
   useEffect(() => {
-    setTheme(read());
+    const next = resolveInitial();
+    setTheme(next);
+    apply(next);
   }, []);
 
   const choose = (next: Theme) => {
@@ -39,7 +49,6 @@ export default function ThemeToggle() {
 
   const options: Array<{ id: Theme; icon: typeof Sun; label: string }> = [
     { id: 'light', icon: Sun, label: 'Light mode' },
-    { id: 'system', icon: MonitorSmartphone, label: 'Match system theme' },
     { id: 'dark', icon: Moon, label: 'Dark mode' },
   ];
 

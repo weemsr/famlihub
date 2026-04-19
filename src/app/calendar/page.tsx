@@ -423,6 +423,24 @@ export default function CalendarPage() {
               />
               <button
                 type="button"
+                className="btn btn-secondary"
+                style={{ padding: '0 16px', width: 'auto', fontSize: '13px', touchAction: 'manipulation' }}
+                onClick={async () => {
+                  try {
+                    const text = await navigator.clipboard.readText();
+                    setGoogleUrlInput(text.trim());
+                    setGoogleUrlError(null);
+                  } catch (err) {
+                    console.error('Clipboard error', err);
+                    setGoogleUrlError("Couldn't read from the clipboard. Paste manually instead.");
+                  }
+                }}
+                disabled={googleSaving}
+              >
+                Paste 📋
+              </button>
+              <button
+                type="button"
                 className="btn"
                 onClick={saveGoogleUrl}
                 disabled={googleSaving || !googleUrlInput.trim()}

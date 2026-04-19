@@ -278,7 +278,7 @@ export default function CalendarPage() {
   );
 
   return (
-    <div>
+    <div style={{ paddingBottom: 'calc(var(--nav-height) + env(safe-area-inset-bottom) + 24px)' }}>
       <div className="flex items-center justify-between mb-4">
         <h1 style={{ marginBottom: 0 }}>Calendar 📆</h1>
         <button

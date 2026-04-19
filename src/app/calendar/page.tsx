@@ -166,13 +166,6 @@ export default function CalendarPage() {
 
   const entries = useMemo(() => entriesFromSetting(googleSetting), [googleSetting]);
 
-  // Auto-expand the calendars panel only when the user hasn't connected
-  // anything yet, so the initial setup flow is immediately visible. Once
-  // connected, default-collapsed (user can expand at any time).
-  useEffect(() => {
-    if (entries.length === 0) setShowCalendarsPanel(true);
-  }, [entries.length]);
-
   const loadData = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;

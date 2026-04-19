@@ -475,7 +475,18 @@ export default function MealsPage() {
                     setActiveDay(next);
                     setActiveDayLabel(dayLabelFor(next));
                   }}
-                  style={{ borderRadius: 16, padding: '12px 16px' }}
+                  style={{
+                    // Match the sibling "Link a Recipe" select and "Quick Add"
+                    // input for height + shape consistency in the modal.
+                    height: 50,
+                    borderRadius: 16,
+                    padding: '0 16px',
+                    backgroundColor: 'var(--input-bg)',
+                    color: 'var(--text-primary)',
+                    fontSize: '1rem',
+                    appearance: 'none',
+                    WebkitAppearance: 'none',
+                  }}
                 />
               </div>
             )}

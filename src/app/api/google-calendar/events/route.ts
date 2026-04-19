@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import ical, { type CalendarComponent, type VEvent } from 'node-ical';
+import type { CalendarComponent, VEvent } from 'node-ical';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
 
 // node-ical hands recurring events back as an rrule instance; we only need
@@ -105,7 +105,9 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Stored URL is not a valid Google Calendar iCal URL.' }, { status: 400 });
   }
 
-  // Fetch + parse the Google ICS feed.
+  // Fetch + parse the Google ICS feed. node-ical is loaded dynamically so
+  // Next.js doesn't evaluate its recurring-events dependency (which uses
+  // BigInt at module init) during build-time page-data collection.
   let parsed: Record<string, CalendarComponent>;
   try {
     const controller = new AbortController();
@@ -120,7 +122,8 @@ export async function GET(req: Request) {
       return NextResponse.json({ error: `Google returned ${res.status} — check the URL is still valid.` }, { status: 502 });
     }
     const text = await res.text();
-    parsed = ical.async.parseICS(text) as unknown as Record<string, CalendarComponent>;
+    const icalMod = await import('node-ical');
+    parsed = icalMod.default.async.parseICS(text) as unknown as Record<string, CalendarComponent>;
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to fetch Google calendar';
     return NextResponse.json({ error: message }, { status: 502 });

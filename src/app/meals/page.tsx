@@ -44,6 +44,10 @@ export default function MealsPage() {
   const [activeDay, setActiveDay] = useState('');
   const [activeDayLabel, setActiveDayLabel] = useState('');
   const [activeMeal, setActiveMeal] = useState('');
+  // When true, the modal was opened by the floating + button (not by a
+  // per-slot button); show a date picker so the user can move the meal to
+  // any day instead of today's first empty slot.
+  const [isFabAdd, setIsFabAdd] = useState(false);
 
   const [selectedRecipeId, setSelectedRecipeId] = useState('');
   const [customName, setCustomName] = useState('');
@@ -198,7 +202,18 @@ export default function MealsPage() {
     setSelectedRecipeId('');
     setCustomName('');
     setMealNote('');
+    setIsFabAdd(false); // per-slot flow; day/slot are fixed by context
     setIsModalOpen(true);
+  };
+
+  // Rebuild the "Monday - Apr 13" style label from a YYYY-MM-DD date.
+  const dayLabelFor = (iso: string): string => {
+    const [y, m, d] = iso.split('-').map(Number);
+    if (!y || !m || !d) return iso;
+    const dt = new Date(y, m - 1, d);
+    const dayName = dt.toLocaleDateString('en-US', { weekday: 'long' });
+    const monthStr = dt.toLocaleDateString('en-US', { month: 'short' });
+    return `${dayName} - ${monthStr} ${dt.getDate()}`;
   };
 
   const saveMeal = async () => {
@@ -257,7 +272,10 @@ export default function MealsPage() {
     const firstEmpty = todaysSlotIds.find(id => !booked.has(id)) || todaysSlotIds[0];
 
     setWeekOffset(0);
+    // Open via the per-slot path first so shared state is seeded...
     openAddModal(dbKey, dayLabel, firstEmpty);
+    // ...then flip the fab-add flag so the modal exposes the date picker.
+    setIsFabAdd(true);
   };
 
   return (
@@ -434,13 +452,33 @@ export default function MealsPage() {
                 <h2 style={{ marginBottom: 2 }}>{activeMeal}</h2>
                 <div style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>{activeDayLabel}</div>
               </div>
-              <button 
+              <button
                 style={{ background: 'transparent', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: 'var(--text-secondary)' }}
                 onClick={() => setIsModalOpen(false)}
               >
                 ✕
               </button>
             </div>
+
+            {/* FAB flow only: date picker so the user can move the meal to
+                any day instead of today. Per-slot flow keeps the day fixed. */}
+            {isFabAdd && (
+              <div style={{ marginBottom: 24 }}>
+                <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Date</label>
+                <input
+                  type="date"
+                  className="input"
+                  value={activeDay}
+                  onChange={e => {
+                    const next = e.target.value;
+                    if (!next) return;
+                    setActiveDay(next);
+                    setActiveDayLabel(dayLabelFor(next));
+                  }}
+                  style={{ borderRadius: 16, padding: '12px 16px' }}
+                />
+              </div>
+            )}
 
             <div style={{ marginBottom: 24 }}>
               <label style={{ display: 'block', fontWeight: 600, marginBottom: 8 }}>Link a Recipe</label>

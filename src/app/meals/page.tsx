@@ -5,6 +5,7 @@ import { Plus, Trash2, Coffee, Sun, Moon, ChevronLeft, ChevronRight } from 'luci
 import { supabase } from '@/lib/supabase';
 import { safeImageUrl } from '@/lib/url';
 import type { MealBody, RecipeBody } from '@/lib/types';
+import Fab from '@/components/Fab';
 
 const MEAL_SLOTS = [
   { id: 'Breakfast', icon: Coffee, color: '#f59e0b' },
@@ -239,8 +240,28 @@ export default function MealsPage() {
     if (error) setMeals(prevMeals);
   };
 
+  // Open the modal pre-filled for today's first empty meal slot (breakfast →
+  // lunch → dinner). Falls back to breakfast if all three are booked. Also
+  // jumps the visible week to include today so the new meal lands in view.
+  const openAddForToday = () => {
+    const d = new Date();
+    const dbKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    const dayName = d.toLocaleDateString('en-US', { weekday: 'long' });
+    const monthStr = d.toLocaleDateString('en-US', { month: 'short' });
+    const dayLabel = `${dayName} - ${monthStr} ${d.getDate()}`;
+
+    const todaysSlotIds = MEAL_SLOTS.map(s => s.id);
+    const booked = new Set(
+      meals.filter(m => m.body?.day === dbKey).map(m => m.body.mealId)
+    );
+    const firstEmpty = todaysSlotIds.find(id => !booked.has(id)) || todaysSlotIds[0];
+
+    setWeekOffset(0);
+    openAddModal(dbKey, dayLabel, firstEmpty);
+  };
+
   return (
-    <div style={{ paddingBottom: 60 }}>
+    <div style={{ paddingBottom: 'calc(var(--nav-height) + env(safe-area-inset-bottom) + 24px)' }}>
       <div className="flex items-center justify-between mb-4" style={{ gap: 8, flexWrap: 'wrap' }}>
         <h1 style={{ marginBottom: 0 }}>Meals 🍽️</h1>
         {weekOffset !== 0 && (
@@ -471,6 +492,15 @@ export default function MealsPage() {
             </button>
           </div>
         </div>
+      )}
+
+      {/* Persistent "+" FAB that opens the add-meal modal for today's first
+          empty slot. Always accessible regardless of scroll position. */}
+      {!isModalOpen && (
+        <Fab
+          ariaLabel="Add meal for today"
+          onClick={openAddForToday}
+        />
       )}
     </div>
   );

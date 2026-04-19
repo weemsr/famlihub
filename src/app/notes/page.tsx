@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, Edit2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import Fab from '@/components/Fab';
 
 interface NoteItem {
   id: string;
@@ -225,6 +226,21 @@ export default function NotesPage() {
           </div>
         );
       })}
+
+      {/* Persistent create-note FAB: mirrors the header "New" button but
+          always reachable from anywhere on the list. */}
+      {!isCreating && (
+        <Fab
+          ariaLabel="New note"
+          onClick={() => {
+            setIsCreating(true);
+            // Scroll the draft into view after React paints the form.
+            requestAnimationFrame(() => {
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            });
+          }}
+        />
+      )}
     </div>
   );
 }

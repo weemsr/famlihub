@@ -33,6 +33,36 @@ export interface MealBody {
   note?: string;
 }
 
+/**
+ * One Google Calendar the user has connected (via its secret iCal URL).
+ * Multiple calendars are supported; each is tinted with its own color on
+ * the Calendar tab. Stored as a list in a single "setting" items row with
+ * title="google_ical_url".
+ */
+export interface GoogleCalendarEntry {
+  id: string;       // client-generated stable id (used as React key + event.calendarId)
+  name: string;     // user-editable label shown in the UI
+  url: string;      // Google secret iCal URL
+  color: string;    // hex, typically from CALENDAR_COLOR_PALETTE
+}
+
+/**
+ * Curated 8-color palette for tinting calendars. First color is the legacy
+ * default (matches the single-calendar era), so migrated users see no change.
+ */
+export const CALENDAR_COLOR_PALETTE: readonly string[] = [
+  '#4285F4', // blue
+  '#0F9D58', // green
+  '#F4B400', // yellow
+  '#DB4437', // red
+  '#AA47BC', // purple
+  '#FF7043', // orange
+  '#26A69A', // teal
+  '#EC407A', // pink
+] as const;
+
+export const CALENDAR_DEFAULT_COLOR = CALENDAR_COLOR_PALETTE[0];
+
 export interface Item<TBody = unknown> {
   id: string;
   type: string;

@@ -15,6 +15,7 @@ const MEAL_SLOTS = [
 interface MealItem {
   id: string;
   body: MealBody;
+  created_at?: string;
 }
 
 interface RecipeItem {
@@ -23,17 +24,25 @@ interface RecipeItem {
   body: RecipeBody;
 }
 
+// Local-midnight timestamp for "today". Used to detect midnight rollover so the
+// week view always shows the correct Monday–Sunday window.
+const getTodayKey = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+};
+
 export default function MealsPage() {
   const [meals, setMeals] = useState<MealItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
   const [weekOffset, setWeekOffset] = useState<0 | 1>(0);
-  
+  const [todayKey, setTodayKey] = useState(getTodayKey);
+
   // Modal State
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [activeDay, setActiveDay] = useState('');
   const [activeDayLabel, setActiveDayLabel] = useState('');
   const [activeMeal, setActiveMeal] = useState('');
-  
+
   const [selectedRecipeId, setSelectedRecipeId] = useState('');
   const [customName, setCustomName] = useState('');
   const [mealNote, setMealNote] = useState('');
@@ -74,16 +83,44 @@ export default function MealsPage() {
     return () => window.removeEventListener('keydown', onKey);
   }, [isModalOpen]);
 
+  // Keep the calendar in sync with the real calendar day. Covers:
+  //  - user leaves the tab open past midnight (interval)
+  //  - user backgrounds the tab and returns later (visibility change)
+  //  - device wakes from sleep (focus event)
+  useEffect(() => {
+    const refresh = () => {
+      const next = getTodayKey();
+      setTodayKey(prev => (prev === next ? prev : next));
+    };
+    const interval = window.setInterval(refresh, 60 * 1000);
+    window.addEventListener('visibilitychange', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener('visibilitychange', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
+
   // O(1) lookup maps for meals and recipes (replaces nested .find() in render loop).
-  const mealBySlot = useMemo(() => {
-    const m = new Map<string, MealItem>();
-    for (const meal of meals) {
+  // Each `${day}:${slot}` holds the list of meals scheduled for that slot, in
+  // creation order, so users can plan 2+ recipes per meal.
+  const mealsBySlot = useMemo(() => {
+    const m = new Map<string, MealItem[]>();
+    const sorted = [...meals].sort((a, b) => {
+      const ta = a.created_at || '';
+      const tb = b.created_at || '';
+      return ta < tb ? -1 : ta > tb ? 1 : 0;
+    });
+    for (const meal of sorted) {
       if (!meal.body) continue;
       const day = meal.body.day;
       const slot = meal.body.mealId;
       if (!day || !slot) continue;
-      // First write wins so deterministic order matches the previous .find() behavior.
-      if (!m.has(`${day}:${slot}`)) m.set(`${day}:${slot}`, meal);
+      const key = `${day}:${slot}`;
+      const list = m.get(key);
+      if (list) list.push(meal);
+      else m.set(key, [meal]);
     }
     return m;
   }, [meals]);
@@ -94,32 +131,40 @@ export default function MealsPage() {
     return m;
   }, [recipes]);
 
-  const getWeekDays = (offset: number) => {
-    const d = new Date();
-    const day = d.getDay();
-    const diff = d.getDate() - day + (day === 0 ? -6 : 1); 
-    const monday = new Date(d.setDate(diff));
-    monday.setDate(monday.getDate() + (offset * 7));
-    
+  // Weeks always run Monday → Sunday in the user's local timezone.
+  // Depending on `todayKey` (a yyyy-m-d string) makes the memo re-evaluate
+  // automatically when midnight rolls over.
+  const currentWeek = useMemo(() => {
+    // Anchor to local midnight so date math never straddles DST edges weirdly.
+    const anchor = new Date();
+    anchor.setHours(0, 0, 0, 0);
+
+    const jsDay = anchor.getDay(); // Sun=0, Mon=1, … Sat=6
+    // Distance back to Monday of the current week (Sunday is 6 days after Mon).
+    const daysSinceMonday = jsDay === 0 ? 6 : jsDay - 1;
+
+    const monday = new Date(anchor);
+    monday.setDate(anchor.getDate() - daysSinceMonday + weekOffset * 7);
+
     return Array.from({ length: 7 }).map((_, i) => {
       const curr = new Date(monday);
       curr.setDate(monday.getDate() + i);
-      
+
       const dayName = curr.toLocaleDateString('en-US', { weekday: 'long' });
       const monthStr = curr.toLocaleDateString('en-US', { month: 'short' });
       const dateNum = curr.getDate();
-      
-      const dbKey = `${curr.getFullYear()}-${String(curr.getMonth()+1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
-      
+
+      const dbKey = `${curr.getFullYear()}-${String(curr.getMonth() + 1).padStart(2, '0')}-${String(curr.getDate()).padStart(2, '0')}`;
+
       return {
         label: `${dayName} - ${monthStr} ${dateNum}`,
         dbKey,
-        dayName
+        dayName,
       };
     });
-  };
-
-  const currentWeek = getWeekDays(weekOffset);
+    // todayKey is intentionally in the deps so the view refreshes at midnight.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekOffset, todayKey]);
 
   const openAddModal = (dayKey: string, dayLabel: string, mealId: string) => {
     setActiveDay(dayKey);
@@ -147,12 +192,8 @@ export default function MealsPage() {
       note: mealNote.trim()
     };
 
-    // Delete any existing meal for this day+slot to prevent duplicates
-    const existing = meals.filter(m => m.body && (m.body.day === activeDay) && m.body.mealId === activeMeal);
-    if (existing.length > 0) {
-      await supabase.from('items').delete().in('id', existing.map(m => m.id));
-    }
-
+    // Multiple meals per slot are allowed — each save is additive, so users
+    // can plan a 2nd/3rd recipe (and its own note) alongside existing ones.
     const { error } = await supabase.from('items').insert({
       type: 'meal',
       title: `${activeDay}-${activeMeal}`,
@@ -218,74 +259,80 @@ export default function MealsPage() {
           <div style={{ display: 'flex', flexDirection: 'column' }}>
             {MEAL_SLOTS.map((slot, i) => {
               const Icon = slot.icon;
-              // Support legacy entries keyed by day name ('Monday') by trying both.
-              const scheduledMeal =
-                mealBySlot.get(`${dayObj.dbKey}:${slot.id}`) ||
-                mealBySlot.get(`${dayObj.dayName}:${slot.id}`) ||
-                null;
-              const linkedRecipe = scheduledMeal?.body?.recipeId ? recipeById.get(scheduledMeal.body.recipeId) ?? null : null;
-              const thumb = safeImageUrl(linkedRecipe?.body?.image);
+              // Collect every meal for this slot. Support legacy entries keyed
+              // by day name ('Monday') by merging both lookups.
+              const scheduled = [
+                ...(mealsBySlot.get(`${dayObj.dbKey}:${slot.id}`) || []),
+                ...(mealsBySlot.get(`${dayObj.dayName}:${slot.id}`) || []),
+              ];
 
               return (
                 <div key={slot.id} style={{
-                  display: 'flex', alignItems: 'center', padding: '16px 20px',
+                  display: 'flex', alignItems: 'flex-start', padding: '16px 20px',
                   borderBottom: i < MEAL_SLOTS.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none'
                 }}>
 
                   {/* Slot Icon & Label */}
-                  <div style={{ minWidth: 110, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>
+                  <div style={{ minWidth: 110, display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0, paddingTop: scheduled.length > 0 ? 8 : 4 }}>
                     <div style={{ padding: 8, backgroundColor: `${slot.color}15`, borderRadius: 12, color: slot.color }}>
                       <Icon size={16} />
                     </div>
                     <span style={{ fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-secondary)' }}>{slot.id}</span>
                   </div>
 
-                  {/* Slot Content */}
-                  <div style={{ flex: 1, paddingLeft: 8, minWidth: 0 }}>
-                    {scheduledMeal ? (
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1 }}>
-                          {thumb && (
-                            <Image
-                              src={thumb}
-                              alt="meal"
-                              width={40}
-                              height={40}
-                              style={{ borderRadius: 8, objectFit: 'cover' }}
-                              unoptimized
-                            />
-                          )}
-                          <div style={{ display: 'flex', flexDirection: 'column' }}>
-                            <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>
-                              {linkedRecipe ? linkedRecipe.title : scheduledMeal.body.customName}
-                            </span>
-                            {scheduledMeal.body.note && (
-                              <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 2 }}>
-                                {scheduledMeal.body.note}
-                              </span>
+                  {/* Slot Content — stack every scheduled meal, then an Add Recipe button */}
+                  <div style={{ flex: 1, paddingLeft: 8, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {scheduled.map(meal => {
+                      const linkedRecipe = meal.body?.recipeId ? recipeById.get(meal.body.recipeId) ?? null : null;
+                      const thumb = safeImageUrl(linkedRecipe?.body?.image);
+                      return (
+                        <div key={meal.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                            {thumb && (
+                              <Image
+                                src={thumb}
+                                alt="meal"
+                                width={40}
+                                height={40}
+                                style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+                                unoptimized
+                              />
                             )}
+                            <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                              <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                {linkedRecipe ? linkedRecipe.title : meal.body.customName}
+                              </span>
+                              {meal.body.note && (
+                                <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
+                                  {meal.body.note}
+                                </span>
+                              )}
+                            </div>
                           </div>
+                          <button
+                            type="button"
+                            aria-label="Remove meal"
+                            style={{ padding: 8, background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0, touchAction: 'manipulation' }}
+                            onClick={() => removeMeal(meal.id)}
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </div>
-                        <button
-                          style={{ padding: 8, background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer' }}
-                          onClick={() => removeMeal(scheduledMeal.id)}
-                        >
-                          <Trash2 size={18} />
-                        </button>
-                      </div>
-                    ) : (
-                      <button 
-                        style={{ 
-                          width: '100%', padding: '8px 12px', borderRadius: 8, 
-                          border: '2px dashed var(--surface-hover)', background: 'transparent',
-                          color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6,
-                          cursor: 'pointer', transition: 'border-color 0.2s ease', fontSize: '0.85rem'
-                        }}
-                        onClick={() => openAddModal(dayObj.dbKey, dayObj.label, slot.id)}
-                      >
-                        <Plus size={16} /> Add Recipe
-                      </button>
-                    )}
+                      );
+                    })}
+                    <button
+                      type="button"
+                      style={{
+                        width: '100%', padding: '8px 12px', borderRadius: 8,
+                        border: '2px dashed var(--surface-hover)', background: 'transparent',
+                        color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: 6,
+                        cursor: 'pointer', transition: 'border-color 0.2s ease', fontSize: '0.85rem',
+                        touchAction: 'manipulation',
+                      }}
+                      onClick={() => openAddModal(dayObj.dbKey, dayObj.label, slot.id)}
+                    >
+                      <Plus size={16} /> {scheduled.length > 0 ? 'Add Another Recipe' : 'Add Recipe'}
+                    </button>
                   </div>
 
                 </div>

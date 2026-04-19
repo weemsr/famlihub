@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, Edit2, FolderPlus } from 'lucide-react';
+import { Plus, Trash2, Edit2, FolderPlus, CheckSquare } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { TodoBody } from '@/lib/types';
+import PageHeader from '@/components/PageHeader';
 
 interface TodoItem {
   id: string;
@@ -131,7 +132,7 @@ export default function TodosPage() {
 
   return (
     <div style={{ paddingBottom: 60 }}>
-      <h1>To-do ✓</h1>
+      <PageHeader icon={CheckSquare} color="#7B3FE4" title="To-do" />
       
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>

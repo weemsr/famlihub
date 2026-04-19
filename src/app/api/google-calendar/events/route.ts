@@ -1,13 +1,6 @@
 import { NextResponse } from 'next/server';
-import type { CalendarComponent, VEvent } from 'node-ical';
+import ICAL from 'ical.js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-
-// node-ical hands recurring events back as an rrule instance; we only need
-// the .between() method so we keep a loose structural type instead of
-// taking a direct dependency on rrule-temporal.
-interface RecurrenceRule {
-  between(start: Date, end: Date, inclusive?: boolean): Date[];
-}
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,14 +29,6 @@ interface OutEvent {
   htmlLink?: string;
 }
 
-function toIso(d: Date): string {
-  return d.toISOString();
-}
-
-function isVEvent(c: CalendarComponent): c is VEvent {
-  return c.type === 'VEVENT';
-}
-
 export async function GET(req: Request) {
   const authHeader = req.headers.get('authorization') || '';
   const jwt = /^Bearer\s+(.+)$/i.exec(authHeader)?.[1];
@@ -52,8 +37,8 @@ export async function GET(req: Request) {
   }
 
   const url = new URL(req.url);
-  const rangeStart = url.searchParams.get('start'); // ISO
-  const rangeEnd = url.searchParams.get('end');     // ISO
+  const rangeStart = url.searchParams.get('start');
+  const rangeEnd = url.searchParams.get('end');
   if (!rangeStart || !rangeEnd) {
     return NextResponse.json({ error: 'start and end query params are required (ISO dates)' }, { status: 400 });
   }
@@ -63,13 +48,12 @@ export async function GET(req: Request) {
   if (isNaN(startDate.getTime()) || isNaN(endDate.getTime()) || startDate >= endDate) {
     return NextResponse.json({ error: 'Invalid start/end' }, { status: 400 });
   }
-  // Hard cap — no more than 120 days at a time.
   const maxMs = 120 * 24 * 60 * 60 * 1000;
   if (endDate.getTime() - startDate.getTime() > maxMs) {
     return NextResponse.json({ error: 'Range too large (max 120 days)' }, { status: 400 });
   }
 
-  // Validate the caller and look up their stored Google iCal URL.
+  // Validate the caller and fetch their stored Google iCal URL.
   let userId: string;
   try {
     const admin = getSupabaseAdmin();
@@ -105,10 +89,8 @@ export async function GET(req: Request) {
     return NextResponse.json({ error: 'Stored URL is not a valid Google Calendar iCal URL.' }, { status: 400 });
   }
 
-  // Fetch + parse the Google ICS feed. node-ical is loaded dynamically so
-  // Next.js doesn't evaluate its recurring-events dependency (which uses
-  // BigInt at module init) during build-time page-data collection.
-  let parsed: Record<string, CalendarComponent>;
+  // Fetch the ICS feed text.
+  let icsText: string;
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -121,86 +103,88 @@ export async function GET(req: Request) {
     if (!res.ok) {
       return NextResponse.json({ error: `Google returned ${res.status} — check the URL is still valid.` }, { status: 502 });
     }
-    const text = await res.text();
-    const icalMod = await import('node-ical');
-    parsed = icalMod.default.async.parseICS(text) as unknown as Record<string, CalendarComponent>;
+    icsText = await res.text();
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Failed to fetch Google calendar';
     return NextResponse.json({ error: message }, { status: 502 });
   }
 
+  // Parse with ical.js and expand recurring events in the requested window.
   const events: OutEvent[] = [];
 
-  for (const k of Object.keys(parsed)) {
-    const ev = parsed[k];
-    if (!isVEvent(ev)) continue;
+  try {
+    const jcal = ICAL.parse(icsText);
+    const comp = new ICAL.Component(jcal);
+    const vevents = comp.getAllSubcomponents('vevent');
 
-    const summary = typeof ev.summary === 'string' ? ev.summary : '';
-    const location = typeof ev.location === 'string' ? ev.location : undefined;
-    const description = typeof ev.description === 'string' ? ev.description : undefined;
-    const htmlLink = (ev as unknown as { url?: string }).url;
+    const windowStart = ICAL.Time.fromJSDate(startDate, true); // true = UTC
+    const windowEnd = ICAL.Time.fromJSDate(endDate, true);
 
-    // Detect whether this event is all-day. node-ical exposes .datetype === 'date'
-    // for DATE values (no time); use a defensive check.
-    const rawStartType = (ev.start as unknown as { dateOnly?: boolean; datetype?: string })?.datetype;
-    const allDay = rawStartType === 'date';
-
-    const start = ev.start instanceof Date ? ev.start : new Date(ev.start as unknown as string | number);
-    const end = ev.end instanceof Date ? ev.end : new Date((ev.end as unknown as string | number) ?? start);
-    if (isNaN(start.getTime())) continue;
-
-    const baseDurationMs = Math.max(0, end.getTime() - start.getTime());
-
-    // Build the list of excluded dates (EXDATE) if any.
-    const exceptions = new Set<string>();
-    const exdate = (ev as unknown as { exdate?: Record<string, Date> }).exdate;
-    if (exdate) {
-      for (const key of Object.keys(exdate)) {
-        const d = exdate[key];
-        if (d instanceof Date) exceptions.add(d.toISOString().slice(0, 10));
-      }
-    }
-
-    if (ev.rrule) {
-      // Recurring: expand to all instances inside the requested window.
-      let rruleInstances: Date[] = [];
+    for (const v of vevents) {
+      let ev: ICAL.Event;
       try {
-        const rule = ev.rrule as unknown as RecurrenceRule;
-        rruleInstances = rule.between(startDate, endDate, true);
+        ev = new ICAL.Event(v);
       } catch {
-        rruleInstances = [];
+        continue;
       }
 
-      for (const occ of rruleInstances) {
-        const occIso = occ.toISOString().slice(0, 10);
-        if (exceptions.has(occIso)) continue;
-        const occEnd = new Date(occ.getTime() + baseDurationMs);
-        events.push({
-          uid: `${ev.uid}-${occ.toISOString()}`,
-          title: summary,
-          start: toIso(occ),
-          end: toIso(occEnd),
-          allDay,
-          location,
-          description,
-          htmlLink,
-        });
-      }
-    } else {
-      // Single occurrence: keep if it overlaps the window.
-      if (end >= startDate && start <= endDate) {
-        events.push({
-          uid: String(ev.uid || k),
-          title: summary,
-          start: toIso(start),
-          end: toIso(end),
-          allDay,
-          location,
-          description,
-          htmlLink,
-        });
+      if (!ev.startDate) continue;
+
+      const summary = ev.summary || '';
+      const location = ev.location || undefined;
+      const description = ev.description || undefined;
+      const uidBase = ev.uid || Math.random().toString(36).slice(2);
+      const allDay = ev.startDate.isDate;
+
+      const baseDurationMs = ev.endDate && ev.startDate
+        ? Math.max(0, ev.endDate.toJSDate().getTime() - ev.startDate.toJSDate().getTime())
+        : 0;
+
+      if (ev.isRecurring()) {
+        // Expand occurrences from the start of our window.
+        try {
+          const iterator = ev.iterator();
+          let occ: ICAL.Time | null;
+          // Hard cap to avoid runaway iterators on broken calendars.
+          let safety = 5000;
+          // eslint-disable-next-line no-cond-assign
+          while ((occ = iterator.next()) && safety-- > 0) {
+            if (occ.compare(windowEnd) > 0) break;
+            if (occ.compare(windowStart) < 0) continue;
+            const occStart = occ.toJSDate();
+            const occEnd = new Date(occStart.getTime() + baseDurationMs);
+            events.push({
+              uid: `${uidBase}-${occStart.toISOString()}`,
+              title: summary,
+              start: occStart.toISOString(),
+              end: occEnd.toISOString(),
+              allDay,
+              location,
+              description,
+            });
+          }
+        } catch {
+          // Skip this event if RRULE can't be expanded.
+        }
+      } else {
+        const s = ev.startDate.toJSDate();
+        const e = ev.endDate ? ev.endDate.toJSDate() : new Date(s.getTime() + baseDurationMs);
+        if (e >= startDate && s <= endDate) {
+          events.push({
+            uid: uidBase,
+            title: summary,
+            start: s.toISOString(),
+            end: e.toISOString(),
+            allDay,
+            location,
+            description,
+          });
+        }
       }
     }
+  } catch (err) {
+    const message = err instanceof Error ? err.message : 'Failed to parse calendar';
+    return NextResponse.json({ error: `Couldn't parse the calendar feed: ${message}` }, { status: 502 });
   }
 
   events.sort((a, b) => (a.start < b.start ? -1 : a.start > b.start ? 1 : 0));

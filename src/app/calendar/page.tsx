@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import Link from 'next/link';
-import { ChevronLeft, ChevronRight, Calendar as CalIcon, Copy, Check, Info } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Info, Link2, Unlink, RefreshCw, ExternalLink } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { MealBody } from '@/lib/types';
 
@@ -17,7 +17,24 @@ interface RecipeItem {
   title: string;
 }
 
+interface GoogleEvent {
+  uid: string;
+  title: string;
+  start: string; // ISO
+  end: string;   // ISO
+  allDay: boolean;
+  location?: string;
+  htmlLink?: string;
+}
+
+interface SettingRow {
+  id: string;
+  body: { url?: string };
+}
+
 const MEAL_SLOT_ORDER: Record<string, number> = { Breakfast: 0, Lunch: 1, Dinner: 2 };
+
+const GOOGLE_SETTING_TITLE = 'google_ical_url';
 
 function isoDay(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
@@ -27,6 +44,20 @@ function fmtDayShort(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
   const dt = new Date(y, m - 1, d);
   return dt.toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
+
+function fmtTime(iso: string): string {
+  const d = new Date(iso);
+  return d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+function isGoogleIcalUrl(input: string): boolean {
+  try {
+    const u = new URL(input.trim());
+    return u.protocol === 'https:' && u.hostname === 'calendar.google.com' && u.pathname.startsWith('/calendar/ical/');
+  } catch {
+    return false;
+  }
 }
 
 export default function CalendarPage() {
@@ -40,25 +71,36 @@ export default function CalendarPage() {
   const [meals, setMeals] = useState<MealItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
 
-  const [feedUrl, setFeedUrl] = useState<string | null>(null);
-  const [feedLoading, setFeedLoading] = useState(false);
-  const [feedError, setFeedError] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [showHow, setShowHow] = useState(false);
+  // Inbound (Google → FamLi) state
+  const [googleSetting, setGoogleSetting] = useState<SettingRow | null>(null);
+  const [googleUrlInput, setGoogleUrlInput] = useState('');
+  const [googleUrlError, setGoogleUrlError] = useState<string | null>(null);
+  const [googleSaving, setGoogleSaving] = useState(false);
+  const [googleEvents, setGoogleEvents] = useState<GoogleEvent[]>([]);
+  const [googleFetching, setGoogleFetching] = useState(false);
+  const [googleFetchError, setGoogleFetchError] = useState<string | null>(null);
+  const [showGcalHow, setShowGcalHow] = useState(false);
 
   const loadData = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
-    const [mealsRes, recipesRes] = await Promise.all([
+    const [mealsRes, recipesRes, settingRes] = await Promise.all([
       supabase.from('items').select('id,title,body,created_at').eq('type', 'meal'),
       supabase.from('items').select('id,title').eq('type', 'recipe'),
+      supabase
+        .from('items')
+        .select('id,body')
+        .eq('type', 'setting')
+        .eq('title', GOOGLE_SETTING_TITLE)
+        .maybeSingle(),
     ]);
     if (mealsRes.data) setMeals(mealsRes.data as unknown as MealItem[]);
     if (recipesRes.data) setRecipes(recipesRes.data as unknown as RecipeItem[]);
+    if (settingRes.data) setGoogleSetting(settingRes.data as unknown as SettingRow);
+    else setGoogleSetting(null);
   }, []);
 
-  // Live sync via the same realtime channel pattern the other pages use.
   const loadRef = useRef(loadData);
   useEffect(() => { loadRef.current = loadData; }, [loadData]);
 
@@ -75,48 +117,50 @@ export default function CalendarPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  // Fetch the signed feed URL once we have a session.
-  useEffect(() => {
-    let cancelled = false;
-    async function getFeed() {
-      setFeedLoading(true);
-      setFeedError(null);
-      const { data: sess } = await supabase.auth.getSession();
-      const jwt = sess.session?.access_token;
-      if (!jwt) {
-        setFeedLoading(false);
-        return;
-      }
-      try {
-        const res = await fetch('/api/calendar-feed-url', {
-          headers: { Authorization: `Bearer ${jwt}` },
-        });
-        if (!res.ok) {
-          const body = await res.text().catch(() => '');
-          throw new Error(body || `Request failed (${res.status})`);
-        }
-        const json = (await res.json()) as { url?: string; error?: string };
-        if (!cancelled) {
-          if (json.url) setFeedUrl(json.url);
-          else setFeedError(json.error || 'No URL returned.');
-        }
-      } catch (err) {
-        if (!cancelled) setFeedError(err instanceof Error ? err.message : 'Failed to load feed URL');
-      } finally {
-        if (!cancelled) setFeedLoading(false);
-      }
-    }
-    getFeed();
-    return () => { cancelled = true; };
-  }, []);
-
   const recipeById = useMemo(() => {
     const m = new Map<string, RecipeItem>();
     for (const r of recipes) m.set(r.id, r);
     return m;
   }, [recipes]);
 
-  // Day → meals[] map for fast cell rendering + upcoming list.
+  // Fetch Google events for the visible month (plus the 7-day upcoming window).
+  const fetchGoogleEvents = useCallback(async (opts?: { silent?: boolean }) => {
+    if (!googleSetting?.body?.url) {
+      setGoogleEvents([]);
+      return;
+    }
+    if (!opts?.silent) setGoogleFetching(true);
+    setGoogleFetchError(null);
+
+    // Window: start of current month view, end of next month — covers the
+    // grid and the upcoming-7-days list even near month boundaries.
+    const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const end = new Date(cursor.getFullYear(), cursor.getMonth() + 2, 0);
+
+    const { data: sess } = await supabase.auth.getSession();
+    const jwt = sess.session?.access_token;
+    if (!jwt) { setGoogleFetching(false); return; }
+
+    try {
+      const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+      const res = await fetch(`/api/google-calendar/events?${qs.toString()}`, {
+        headers: { Authorization: `Bearer ${jwt}` },
+      });
+      const json = (await res.json()) as { events?: GoogleEvent[]; error?: string };
+      if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
+      setGoogleEvents(json.events || []);
+    } catch (err) {
+      setGoogleFetchError(err instanceof Error ? err.message : 'Failed to load Google events');
+    } finally {
+      setGoogleFetching(false);
+    }
+  }, [googleSetting, cursor]);
+
+  // Refetch whenever the cursor month or stored URL changes.
+  useEffect(() => {
+    fetchGoogleEvents();
+  }, [fetchGoogleEvents]);
+
   const mealsByDay = useMemo(() => {
     const m = new Map<string, MealItem[]>();
     for (const meal of meals) {
@@ -125,19 +169,31 @@ export default function CalendarPage() {
       if (list) list.push(meal);
       else m.set(meal.body.day, [meal]);
     }
-    // Sort each day's meals by slot order.
     for (const [, list] of m) {
       list.sort((a, b) => (MEAL_SLOT_ORDER[a.body.mealId] ?? 99) - (MEAL_SLOT_ORDER[b.body.mealId] ?? 99));
     }
     return m;
   }, [meals]);
 
-  // Build the calendar grid for the cursor month.
+  const googleEventsByDay = useMemo(() => {
+    const m = new Map<string, GoogleEvent[]>();
+    for (const ev of googleEvents) {
+      const key = isoDay(new Date(ev.start));
+      const list = m.get(key);
+      if (list) list.push(ev);
+      else m.set(key, [ev]);
+    }
+    for (const [, list] of m) {
+      list.sort((a, b) => (a.start < b.start ? -1 : 1));
+    }
+    return m;
+  }, [googleEvents]);
+
   const grid = useMemo(() => {
     const year = cursor.getFullYear();
     const month = cursor.getMonth();
     const firstOfMonth = new Date(year, month, 1);
-    const startOffset = firstOfMonth.getDay(); // Sun=0..Sat=6
+    const startOffset = firstOfMonth.getDay();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
 
     const cells: Array<{ iso: string | null; dayNum: number | null }> = [];
@@ -150,23 +206,17 @@ export default function CalendarPage() {
   }, [cursor]);
 
   const upcoming = useMemo(() => {
-    const start = isoDay(today);
-    const endDate = new Date(today);
-    endDate.setDate(today.getDate() + 6);
-    const end = isoDay(endDate);
-
-    const result: Array<{ iso: string; list: MealItem[] }> = [];
-    // Walk 7 days from today.
+    const result: Array<{ iso: string; meals: MealItem[]; events: GoogleEvent[] }> = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(today);
       d.setDate(today.getDate() + i);
       const iso = isoDay(d);
-      const list = (mealsByDay.get(iso) || []).slice();
-      if (list.length) result.push({ iso, list });
+      const dayMeals = mealsByDay.get(iso) || [];
+      const dayEvents = googleEventsByDay.get(iso) || [];
+      if (dayMeals.length || dayEvents.length) result.push({ iso, meals: dayMeals, events: dayEvents });
     }
-    void start; void end;
     return result;
-  }, [today, mealsByDay]);
+  }, [today, mealsByDay, googleEventsByDay]);
 
   const monthLabel = cursor.toLocaleString('default', { month: 'long', year: 'numeric' });
   const prevMonth = () => setCursor(c => new Date(c.getFullYear(), c.getMonth() - 1, 1));
@@ -175,14 +225,48 @@ export default function CalendarPage() {
 
   const todayIso = isoDay(today);
 
-  const onCopyFeed = async () => {
-    if (!feedUrl) return;
+  const saveGoogleUrl = async () => {
+    const url = googleUrlInput.trim();
+    if (!isGoogleIcalUrl(url)) {
+      setGoogleUrlError('That doesn\'t look like a Google Calendar secret iCal URL. It should start with https://calendar.google.com/calendar/ical/');
+      return;
+    }
+    setGoogleUrlError(null);
+    setGoogleSaving(true);
     try {
-      await navigator.clipboard.writeText(feedUrl);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // no-op; user can long-press to copy
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return;
+      if (googleSetting) {
+        const { error } = await supabase
+          .from('items')
+          .update({ body: { url } })
+          .eq('id', googleSetting.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from('items').insert({
+          type: 'setting',
+          title: GOOGLE_SETTING_TITLE,
+          body: { url },
+          user_id: userData.user.id,
+        });
+        if (error) throw error;
+      }
+      setGoogleUrlInput('');
+      await loadData();
+    } catch (err) {
+      setGoogleUrlError(err instanceof Error ? err.message : 'Failed to save.');
+    } finally {
+      setGoogleSaving(false);
+    }
+  };
+
+  const disconnectGoogle = async () => {
+    if (!googleSetting) return;
+    if (typeof window !== 'undefined' && !window.confirm('Disconnect your Google Calendar? Your Google events will disappear from the FamLi calendar until you reconnect.')) return;
+    const { error } = await supabase.from('items').delete().eq('id', googleSetting.id);
+    if (!error) {
+      setGoogleSetting(null);
+      setGoogleEvents([]);
     }
   };
 
@@ -200,23 +284,14 @@ export default function CalendarPage() {
         </button>
       </div>
 
+      {/* Month grid */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-          <button
-            type="button"
-            onClick={prevMonth}
-            aria-label="Previous month"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, color: 'var(--text-secondary)', touchAction: 'manipulation' }}
-          >
+          <button type="button" onClick={prevMonth} aria-label="Previous month" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, color: 'var(--text-secondary)', touchAction: 'manipulation' }}>
             <ChevronLeft size={20} />
           </button>
           <h2 style={{ marginBottom: 0 }}>{monthLabel}</h2>
-          <button
-            type="button"
-            onClick={nextMonth}
-            aria-label="Next month"
-            style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, color: 'var(--text-secondary)', touchAction: 'manipulation' }}
-          >
+          <button type="button" onClick={nextMonth} aria-label="Next month" style={{ background: 'transparent', border: 'none', cursor: 'pointer', padding: 8, color: 'var(--text-secondary)', touchAction: 'manipulation' }}>
             <ChevronRight size={20} />
           </button>
         </div>
@@ -231,6 +306,7 @@ export default function CalendarPage() {
               return <div key={`blank-${i}`} style={{ padding: '12px 0' }} />;
             }
             const dayMeals = mealsByDay.get(cell.iso) || [];
+            const dayEvents = googleEventsByDay.get(cell.iso) || [];
             const isToday = cell.iso === todayIso;
             return (
               <div
@@ -243,7 +319,7 @@ export default function CalendarPage() {
                   borderRadius: 8,
                   fontWeight: isToday ? 700 : 500,
                   fontSize: '0.9rem',
-                  minHeight: 44,
+                  minHeight: 48,
                   display: 'flex',
                   flexDirection: 'column',
                   alignItems: 'center',
@@ -252,19 +328,13 @@ export default function CalendarPage() {
                 }}
               >
                 <span>{cell.dayNum}</span>
-                {dayMeals.length > 0 && (
+                {(dayMeals.length > 0 || dayEvents.length > 0) && (
                   <div style={{ display: 'flex', gap: 3, height: 6 }}>
                     {dayMeals.slice(0, 3).map(m => (
-                      <span
-                        key={m.id}
-                        aria-hidden
-                        style={{
-                          width: 6,
-                          height: 6,
-                          borderRadius: 999,
-                          background: isToday ? 'rgba(255,255,255,0.9)' : 'var(--accent-color)',
-                        }}
-                      />
+                      <span key={`m-${m.id}`} aria-hidden style={{ width: 6, height: 6, borderRadius: 999, background: isToday ? 'rgba(255,255,255,0.9)' : 'var(--accent-color)' }} />
+                    ))}
+                    {dayEvents.slice(0, 3).map(ev => (
+                      <span key={`g-${ev.uid}`} aria-hidden title={ev.title} style={{ width: 6, height: 6, borderRadius: 999, background: isToday ? 'rgba(255,255,255,0.6)' : '#4285F4' }} />
                     ))}
                   </div>
                 )}
@@ -272,36 +342,56 @@ export default function CalendarPage() {
             );
           })}
         </div>
+
+        <div style={{ display: 'flex', gap: 16, justifyContent: 'center', marginTop: 16, fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: 'var(--accent-color)' }} /> Meals
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ width: 6, height: 6, borderRadius: 999, background: '#4285F4' }} /> Google events
+          </span>
+        </div>
       </div>
 
-      {/* Upcoming 7-day summary */}
+      {/* Upcoming */}
       <div className="card">
         <h3 style={{ marginBottom: 12 }}>Upcoming (next 7 days)</h3>
         {upcoming.length === 0 ? (
           <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>
-            Nothing scheduled. Add meals on the <Link href="/meals" style={{ color: 'var(--accent-color)', fontWeight: 600 }}>Meals</Link> page.
+            Nothing scheduled. Add meals on the <Link href="/meals" style={{ color: 'var(--accent-color)', fontWeight: 600 }}>Meals</Link> page{googleSetting ? '' : ', or connect a Google Calendar below'}.
           </p>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {upcoming.map(({ iso, list }) => (
+            {upcoming.map(({ iso, meals: mealList, events: eventList }) => (
               <div key={iso}>
                 <div style={{ fontSize: '0.85rem', fontWeight: 700, color: 'var(--text-secondary)', marginBottom: 6 }}>
                   {iso === todayIso ? `Today — ${fmtDayShort(iso)}` : fmtDayShort(iso)}
                 </div>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {list.map(m => {
+                  {mealList.map(m => {
                     const r = m.body.recipeId ? recipeById.get(m.body.recipeId) : null;
                     return (
                       <div key={m.id} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', minWidth: 72 }}>
-                          {m.body.mealId}
-                        </span>
-                        <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 500 }}>
-                          {r?.title || m.body.customName || '—'}
-                        </span>
+                        <span style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', minWidth: 72 }}>{m.body.mealId}</span>
+                        <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 500 }}>{r?.title || m.body.customName || '—'}</span>
                       </div>
                     );
                   })}
+                  {eventList.map(ev => (
+                    <div key={ev.uid} style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
+                      <span style={{ fontSize: '0.8rem', fontWeight: 600, color: '#4285F4', minWidth: 72 }}>
+                        {ev.allDay ? 'All day' : fmtTime(ev.start)}
+                      </span>
+                      {ev.htmlLink ? (
+                        <a href={ev.htmlLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 500, display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          {ev.title || '(no title)'}
+                          <ExternalLink size={12} style={{ opacity: 0.6 }} />
+                        </a>
+                      ) : (
+                        <span style={{ fontSize: '0.95rem', color: 'var(--text-primary)', fontWeight: 500 }}>{ev.title || '(no title)'}</span>
+                      )}
+                    </div>
+                  ))}
                 </div>
               </div>
             ))}
@@ -309,65 +399,96 @@ export default function CalendarPage() {
         )}
       </div>
 
-      {/* Google Calendar sync */}
+      {/* Inbound: Google Calendar → FamLi */}
       <div className="card">
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
-          <CalIcon size={20} style={{ color: 'var(--accent-color)' }} />
-          <h3 style={{ marginBottom: 0 }}>Sync with Google Calendar</h3>
+          <Link2 size={20} style={{ color: '#4285F4' }} />
+          <h3 style={{ marginBottom: 0 }}>Show my Google Calendar here</h3>
         </div>
-        <p className="text-sm" style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
-          Subscribe once and your meal plan shows up on your Google Calendar automatically.
-        </p>
 
-        {feedLoading && (
-          <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Preparing your feed URL…</p>
-        )}
-        {feedError && (
-          <p className="text-sm" style={{ color: 'var(--danger-color)' }}>{feedError}</p>
-        )}
-        {feedUrl && (
+        {!googleSetting ? (
           <>
-            <div style={{ display: 'flex', gap: 8, alignItems: 'stretch', marginBottom: 12 }}>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)', marginBottom: 16 }}>
+              Paste your Google Calendar&apos;s secret iCal URL. Your events will show up on the grid above and in the upcoming list, alongside your meals.
+            </p>
+
+            <div style={{ display: 'flex', gap: 8, marginBottom: 8 }}>
               <input
                 type="text"
-                readOnly
-                value={feedUrl}
-                onFocus={e => e.currentTarget.select()}
                 className="input"
+                placeholder="https://calendar.google.com/calendar/ical/..."
+                value={googleUrlInput}
+                onChange={e => { setGoogleUrlInput(e.target.value); setGoogleUrlError(null); }}
                 style={{ fontSize: '0.85rem', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', padding: '10px 14px' }}
               />
               <button
                 type="button"
-                onClick={onCopyFeed}
-                aria-label="Copy feed URL"
                 className="btn"
-                style={{ width: 'auto', padding: '0 16px', touchAction: 'manipulation', background: copied ? 'var(--success-color)' : undefined }}
+                onClick={saveGoogleUrl}
+                disabled={googleSaving || !googleUrlInput.trim()}
+                style={{ width: 'auto', padding: '0 16px', touchAction: 'manipulation' }}
               >
-                {copied ? <Check size={18} /> : <Copy size={18} />}
+                {googleSaving ? 'Saving…' : 'Connect'}
               </button>
             </div>
+
+            {googleUrlError && (
+              <p className="text-sm" style={{ color: 'var(--danger-color)', marginBottom: 12 }}>{googleUrlError}</p>
+            )}
+
             <button
               type="button"
-              onClick={() => setShowHow(v => !v)}
+              onClick={() => setShowGcalHow(v => !v)}
               style={{ background: 'transparent', border: 'none', padding: 0, color: 'var(--accent-color)', fontWeight: 600, fontSize: '0.9rem', cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}
             >
-              <Info size={14} /> {showHow ? 'Hide instructions' : 'How to subscribe'}
+              <Info size={14} /> {showGcalHow ? 'Hide instructions' : 'Where do I find this URL?'}
             </button>
-            {showHow && (
+
+            {showGcalHow && (
               <ol style={{ marginTop: 10, marginBottom: 0, paddingLeft: 20, fontSize: '0.9rem', color: 'var(--text-primary)', lineHeight: 1.6 }}>
-                <li>Open <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer nofollow" style={{ color: 'var(--accent-color)', fontWeight: 600 }}>Google Calendar</a> on a desktop browser.</li>
-                <li>In the left sidebar, click the <strong>+</strong> next to <em>Other calendars</em>.</li>
-                <li>Choose <strong>From URL</strong>.</li>
-                <li>Paste the URL above and click <strong>Add calendar</strong>.</li>
-                <li>Google refreshes the feed on its own schedule (often every several hours).</li>
+                <li>Open <a href="https://calendar.google.com" target="_blank" rel="noopener noreferrer nofollow" style={{ color: 'var(--accent-color)', fontWeight: 600 }}>Google Calendar</a> on a desktop.</li>
+                <li>In the left sidebar under <em>My calendars</em>, hover over the calendar you want to see, click the <strong>⋮</strong> (three dots), then <strong>Settings and sharing</strong>.</li>
+                <li>Scroll down to <strong>Integrate calendar</strong>.</li>
+                <li>Copy the URL labeled <strong>Secret address in iCal format</strong> (not the Public one).</li>
+                <li>Paste it above and click Connect.</li>
               </ol>
             )}
+
             <p className="text-sm" style={{ color: 'var(--text-secondary)', marginTop: 14, marginBottom: 0, fontSize: '0.8rem' }}>
-              Keep this URL private — anyone with it can see your meal plan.
+              That URL is private — keep it out of shared channels. It stays on your FamLi account and is only used by FamLi&apos;s server to fetch events.
             </p>
+          </>
+        ) : (
+          <>
+            <p className="text-sm" style={{ color: 'var(--text-secondary)', marginBottom: 12 }}>
+              Connected. {googleEvents.length > 0 ? `${googleEvents.length} events in the current view.` : 'No events in this window.'}
+            </p>
+            {googleFetchError && (
+              <p className="text-sm" style={{ color: 'var(--danger-color)', marginBottom: 12 }}>{googleFetchError}</p>
+            )}
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => fetchGoogleEvents()}
+                disabled={googleFetching}
+                style={{ width: 'auto', padding: '8px 16px', touchAction: 'manipulation' }}
+              >
+                <RefreshCw size={16} /> {googleFetching ? 'Refreshing…' : 'Refresh'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={disconnectGoogle}
+                style={{ width: 'auto', padding: '8px 16px', touchAction: 'manipulation' }}
+              >
+                <Unlink size={16} /> Disconnect
+              </button>
+            </div>
           </>
         )}
       </div>
+
     </div>
   );
 }

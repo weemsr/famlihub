@@ -1,10 +1,9 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Image from 'next/image';
-import { Plus, Trash2, Coffee, Sun, Moon, CalendarPlus } from 'lucide-react';
+import { Plus, Trash2, Coffee, Sun, Moon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { safeImageUrl } from '@/lib/url';
-import { buildAddToGoogleLink } from '@/lib/gcal-link';
 import type { MealBody, RecipeBody } from '@/lib/types';
 
 const MEAL_SLOTS = [
@@ -287,12 +286,6 @@ export default function MealsPage() {
                       const linkedRecipe = meal.body?.recipeId ? recipeById.get(meal.body.recipeId) ?? null : null;
                       const thumb = safeImageUrl(linkedRecipe?.body?.image);
                       const displayTitle = linkedRecipe ? linkedRecipe.title : meal.body.customName || 'Meal';
-                      const gcalUrl = buildAddToGoogleLink({
-                        day: meal.body.day,
-                        slot: meal.body.mealId,
-                        title: displayTitle,
-                        note: meal.body.note,
-                      });
                       return (
                         <div key={meal.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
@@ -317,28 +310,14 @@ export default function MealsPage() {
                               )}
                             </div>
                           </div>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-                            {gcalUrl && (
-                              <a
-                                href={gcalUrl}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                aria-label="Add to Google Calendar"
-                                title="Add to Google Calendar"
-                                style={{ padding: 8, background: 'transparent', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', touchAction: 'manipulation' }}
-                              >
-                                <CalendarPlus size={18} />
-                              </a>
-                            )}
-                            <button
-                              type="button"
-                              aria-label="Remove meal"
-                              style={{ padding: 8, background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', touchAction: 'manipulation' }}
-                              onClick={() => removeMeal(meal.id)}
-                            >
-                              <Trash2 size={18} />
-                            </button>
-                          </div>
+                          <button
+                            type="button"
+                            aria-label="Remove meal"
+                            style={{ padding: 8, background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0, touchAction: 'manipulation' }}
+                            onClick={() => removeMeal(meal.id)}
+                          >
+                            <Trash2 size={18} />
+                          </button>
                         </div>
                       );
                     })}

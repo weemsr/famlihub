@@ -34,6 +34,17 @@ export interface MealBody {
 }
 
 /**
+ * Recurring home/car maintenance item (Upkeep tab). Stored in `items` with
+ * type='maintenance'. `lastDone` is absent when the user has never marked
+ * the task complete yet.
+ */
+export interface MaintenanceBody {
+  intervalDays: number;
+  lastDone?: string; // ISO yyyy-mm-dd
+  note?: string;
+}
+
+/**
  * One Google Calendar the user has connected (via its secret iCal URL).
  * Multiple calendars are supported; each is tinted with its own color on
  * the Calendar tab. Stored as a list in a single "setting" items row with
@@ -79,6 +90,7 @@ export type RecipeItem = Item<RecipeBody> & { title: string };
 export type MealItem = Item<MealBody>;
 export type NoteItem = Item<string> & { title: string };
 export type InventoryItem = Item<unknown> & { title: string };
+export type MaintenanceItem = Item<MaintenanceBody> & { title: string };
 
 /**
  * Coerce an unknown value to a string[]. Handles the common scraped shapes:

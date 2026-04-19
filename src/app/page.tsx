@@ -4,6 +4,7 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { CheckSquare, ShoppingCart, Utensils, PenTool, Package } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import ThemeToggle from '@/components/ThemeToggle';
 
 export default function Home() {
   const [counts, setCounts] = useState({ todo: 0, grocery: 0, recipe: 0, note: 0, inventory: 0 });
@@ -61,7 +62,8 @@ export default function Home() {
         />
       </div>
 
-      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, gap: 12 }}>
+        <ThemeToggle />
         <button
           onClick={() => {
             // AuthProvider's onAuthStateChange flips back to the login screen
@@ -85,7 +87,7 @@ export default function Home() {
       <div className="card">
         <h3 style={{ marginBottom: 4 }}>Pantry Inventory</h3>
         <p className="text-sm">{counts.inventory} ingredients logged.</p>
-        <Link href="/inventory" className="btn mt-4 btn-secondary" style={{ background: 'var(--surface-color)', color: 'var(--text-primary)', border: '2px solid rgba(0,0,0,0.1)' }}>
+        <Link href="/inventory" className="btn mt-4 btn-secondary" style={{ background: 'var(--surface-color)', color: 'var(--text-primary)', border: '2px solid var(--hairline-strong)' }}>
           <Package size={18} /> Open Pantry
         </Link>
       </div>
@@ -106,7 +108,7 @@ export default function Home() {
       <div className="card">
         <h3 style={{ marginBottom: 4 }}>Whiteboard Notes</h3>
         <p className="text-sm">{counts.note} specific sticky notes saved on the board.</p>
-        <Link href="/notes" className="btn mt-4 btn-secondary" style={{ background: 'rgba(0,0,0,0.05)', color: 'var(--text-primary)' }}>
+        <Link href="/notes" className="btn mt-4 btn-secondary" style={{ background: 'var(--surface-hover)', color: 'var(--text-primary)' }}>
           <PenTool size={18} /> Read Board
         </Link>
       </div>

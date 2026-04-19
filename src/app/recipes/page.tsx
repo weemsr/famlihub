@@ -49,7 +49,7 @@ const IngredientRow = ({ ing }: { ing: string }) => {
         ) : (
           <button 
             className="btn" 
-            style={{ padding: '4px 12px', fontSize: 12, width: 'auto', minWidth: 60, background: 'rgba(0,0,0,0.05)', color: 'var(--text-primary)' }}
+            style={{ padding: '4px 12px', fontSize: 12, width: 'auto', minWidth: 60, background: 'var(--surface-hover)', color: 'var(--text-primary)' }}
             onClick={() => setShowOptions(!showOptions)}
           >
             + Add
@@ -352,7 +352,7 @@ export default function RecipesPage() {
           const safeSource = safeHttpUrl(body.sourceUrl);
 
           return (
-            <div key={recipe.id} style={{ borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+            <div key={recipe.id} style={{ borderBottom: '1px solid var(--hairline)' }}>
               <div
                 style={{ padding: '20px', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}
                 onClick={() => !isEditing && setExpandedId(isExpanded ? null : recipe.id)}

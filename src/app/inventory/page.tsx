@@ -75,7 +75,7 @@ export default function InventoryPage() {
       <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {items.length === 0 && <p style={{color: 'var(--text-secondary)', textAlign: 'center'}}>Pantry is completely empty! Start adding some staples.</p>}
         {items.map(item => (
-          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+          <div key={item.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--hairline)' }}>
             <span style={{ fontWeight: 600 }}>{item.title}</span>
             <button 
               className="btn" 

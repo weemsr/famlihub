@@ -112,7 +112,7 @@ export default function GroceriesPage() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
         {list.length === 0 && <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>No items yet.</span>}
         {list.map(item => (
-          <div key={item.id} className="checkbox-row flex items-center justify-between" style={{ padding: '8px 0', borderBottom: '1px solid rgba(0,0,0,0.02)' }}>
+          <div key={item.id} className="checkbox-row flex items-center justify-between" style={{ padding: '8px 0', borderBottom: '1px solid var(--hairline)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <input 
                 type="checkbox" 

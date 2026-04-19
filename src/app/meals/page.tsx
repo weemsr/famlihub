@@ -1,9 +1,10 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Image from 'next/image';
-import { Plus, Trash2, Coffee, Sun, Moon } from 'lucide-react';
+import { Plus, Trash2, Coffee, Sun, Moon, CalendarPlus } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { safeImageUrl } from '@/lib/url';
+import { buildAddToGoogleLink } from '@/lib/gcal-link';
 import type { MealBody, RecipeBody } from '@/lib/types';
 
 const MEAL_SLOTS = [
@@ -220,7 +221,7 @@ export default function MealsPage() {
       <div className="flex items-center justify-between mb-4">
         <h1 style={{ marginBottom: 0 }}>Meals 🍽️</h1>
         
-        <div style={{ display: 'flex', gap: 4, background: 'rgba(0,0,0,0.05)', padding: 4, borderRadius: 999 }}>
+        <div style={{ display: 'flex', gap: 4, background: 'var(--surface-hover)', padding: 4, borderRadius: 999 }}>
           <button 
             className="btn" 
             style={{ 
@@ -250,7 +251,7 @@ export default function MealsPage() {
 
       {currentWeek.map(dayObj => (
         <div key={dayObj.dbKey} className="card" style={{ padding: 0, marginBottom: 24, overflow: 'hidden' }}>
-          <div style={{ backgroundColor: 'var(--surface-hover)', padding: '12px 20px', borderBottom: '1px solid rgba(0,0,0,0.05)' }}>
+          <div style={{ backgroundColor: 'var(--surface-hover)', padding: '12px 20px', borderBottom: '1px solid var(--hairline)' }}>
             <h2 style={{ fontSize: '1.15rem', marginBottom: 0, color: 'var(--text-primary)' }}>
               {dayObj.label}
             </h2>
@@ -269,7 +270,7 @@ export default function MealsPage() {
               return (
                 <div key={slot.id} style={{
                   display: 'flex', alignItems: 'flex-start', padding: '16px 20px',
-                  borderBottom: i < MEAL_SLOTS.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none'
+                  borderBottom: i < MEAL_SLOTS.length - 1 ? '1px solid var(--hairline)' : 'none'
                 }}>
 
                   {/* Slot Icon & Label */}
@@ -285,6 +286,13 @@ export default function MealsPage() {
                     {scheduled.map(meal => {
                       const linkedRecipe = meal.body?.recipeId ? recipeById.get(meal.body.recipeId) ?? null : null;
                       const thumb = safeImageUrl(linkedRecipe?.body?.image);
+                      const displayTitle = linkedRecipe ? linkedRecipe.title : meal.body.customName || 'Meal';
+                      const gcalUrl = buildAddToGoogleLink({
+                        day: meal.body.day,
+                        slot: meal.body.mealId,
+                        title: displayTitle,
+                        note: meal.body.note,
+                      });
                       return (
                         <div key={meal.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
@@ -300,7 +308,7 @@ export default function MealsPage() {
                             )}
                             <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
                               <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                                {linkedRecipe ? linkedRecipe.title : meal.body.customName}
+                                {displayTitle}
                               </span>
                               {meal.body.note && (
                                 <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
@@ -309,14 +317,28 @@ export default function MealsPage() {
                               )}
                             </div>
                           </div>
-                          <button
-                            type="button"
-                            aria-label="Remove meal"
-                            style={{ padding: 8, background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', flexShrink: 0, touchAction: 'manipulation' }}
-                            onClick={() => removeMeal(meal.id)}
-                          >
-                            <Trash2 size={18} />
-                          </button>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
+                            {gcalUrl && (
+                              <a
+                                href={gcalUrl}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                aria-label="Add to Google Calendar"
+                                title="Add to Google Calendar"
+                                style={{ padding: 8, background: 'transparent', color: 'var(--text-secondary)', display: 'inline-flex', alignItems: 'center', touchAction: 'manipulation' }}
+                              >
+                                <CalendarPlus size={18} />
+                              </a>
+                            )}
+                            <button
+                              type="button"
+                              aria-label="Remove meal"
+                              style={{ padding: 8, background: 'transparent', border: 'none', color: 'var(--text-secondary)', cursor: 'pointer', touchAction: 'manipulation' }}
+                              onClick={() => removeMeal(meal.id)}
+                            >
+                              <Trash2 size={18} />
+                            </button>
+                          </div>
                         </div>
                       );
                     })}
@@ -374,7 +396,7 @@ export default function MealsPage() {
                 className="input" 
                 value={selectedRecipeId} 
                 onChange={e => { setSelectedRecipeId(e.target.value); setCustomName(''); }}
-                style={{ appearance: 'none', height: 50, backgroundColor: '#f1f1f1', borderRadius: 16 }}
+                style={{ appearance: 'none', height: 50, backgroundColor: 'var(--input-bg)', color: 'var(--text-primary)', borderRadius: 16 }}
               >
                 <option value="">-- Choose a Saved Recipe --</option>
                 {recipes.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}

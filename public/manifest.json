@@ -3,19 +3,29 @@
   "short_name": "FamLi",
   "description": "Shared notes, todos, recipes, and groceries.",
   "start_url": "/",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "portrait",
   "background_color": "#F7F7F7",
-  "theme_color": "#0f172a",
+  "theme_color": "#97C1B5",
   "icons": [
     {
-      "src": "/logo.png",
+      "src": "/logo3.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
-      "src": "/logo.png",
+      "src": "/logo3.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/logo3.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }

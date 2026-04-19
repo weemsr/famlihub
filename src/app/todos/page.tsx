@@ -139,7 +139,7 @@ export default function TodosPage() {
             className="input" 
             value={activeCategory} 
             onChange={e => setActiveCategory(e.target.value)}
-            style={{ width: '100%', backgroundColor: '#f9f9f9', borderRadius: 16, border: '1px solid var(--surface-hover)' }}
+            style={{ width: '100%', backgroundColor: 'var(--input-bg)', color: 'var(--text-primary)', borderRadius: 16, border: '1px solid var(--surface-hover)' }}
           >
             {CATEGORIES.map(c => <option key={c} value={c}>{c}</option>)}
           </select>
@@ -171,7 +171,7 @@ export default function TodosPage() {
              style={{ marginBottom: 24, padding: 0, overflow: 'hidden' }}
           >
             <div 
-               style={{ backgroundColor: 'var(--surface-hover)', padding: '12px 20px', borderBottom: isCollapsed ? 'none' : '1px solid rgba(0,0,0,0.05)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+               style={{ backgroundColor: 'var(--surface-hover)', padding: '12px 20px', borderBottom: isCollapsed ? 'none' : '1px solid var(--hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
                onClick={() => toggleCategory(categoryName)}
             >
               <h2 style={{ fontSize: '1.1rem', marginBottom: 0, color: 'var(--text-primary)' }}>{categoryName} {catItems.length > 0 ? `(${catItems.length})` : ''}</h2>
@@ -188,7 +188,7 @@ export default function TodosPage() {
                     <div 
                       key={item.id} 
                       className="checkbox-row flex items-center justify-between" 
-                      style={{ padding: '12px 0', borderBottom: idx < catItems.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}
+                      style={{ padding: '12px 0', borderBottom: idx < catItems.length - 1 ? '1px solid var(--hairline)' : 'none' }}
                     >
                       <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, paddingRight: 16 }}>
                         <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -216,7 +216,7 @@ export default function TodosPage() {
                                  left: 0,
                                  zIndex: 10,
                                  background: 'var(--surface-color)',
-                                 border: '1px solid rgba(0,0,0,0.08)',
+                                 border: '1px solid var(--hairline-strong)',
                                  borderRadius: 12,
                                  boxShadow: '0 8px 20px rgba(0,0,0,0.12)',
                                  listStyle: 'none',
@@ -326,7 +326,7 @@ export default function TodosPage() {
                 <div 
                   key={item.id} 
                   className="checkbox-row flex items-center justify-between" 
-                  style={{ padding: '10px 0', borderBottom: idx < completedItems.length - 1 ? '1px solid rgba(0,0,0,0.05)' : 'none' }}
+                  style={{ padding: '10px 0', borderBottom: idx < completedItems.length - 1 ? '1px solid var(--hairline)' : 'none' }}
                 >
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, paddingRight: 16 }}>
                     <input 
@@ -340,7 +340,7 @@ export default function TodosPage() {
                         {item.title}
                       </span>
                       {item.body?.completedAt && (
-                        <span style={{ fontSize: '0.75rem', color: '#a0a0a0', whiteSpace: 'nowrap', marginLeft: 12 }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', whiteSpace: 'nowrap', marginLeft: 12 }}>
                           {new Date(item.body.completedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
                         </span>
                       )}

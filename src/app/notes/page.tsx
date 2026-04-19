@@ -216,7 +216,7 @@ export default function NotesPage() {
             </div>
 
             {isExpanded && (
-              <div style={{ padding: '0 20px 24px 20px', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: 16 }}>
+              <div style={{ padding: '0 20px 24px 20px', borderTop: '1px solid var(--hairline)', paddingTop: 16 }}>
                 <p className="text-sm" style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
                   {bodyText}
                 </p>

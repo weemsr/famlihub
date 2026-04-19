@@ -1,7 +1,8 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, PackageOpen } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import PageHeader from '@/components/PageHeader';
 
 interface InventoryItem {
   id: string;
@@ -53,7 +54,7 @@ export default function InventoryPage() {
 
   return (
     <div>
-      <h1>Kitchen Inventory 📦</h1>
+      <PageHeader icon={PackageOpen} color="#2D6A4F" title="Kitchen Inventory" />
       <p className="text-sm mb-4">Keep track of ingredients, pantry staples, and spices.</p>
       
       <div className="card" style={{ marginBottom: 24 }}>

@@ -2,7 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import {
   ChevronLeft, ChevronRight, Info, Link2, RefreshCw, ExternalLink,
-  MapPin, X, Trash2, Pencil, Check, Plus,
+  MapPin, X, Trash2, Pencil, Check, Plus, CalendarDays,
 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import {
@@ -10,6 +10,7 @@ import {
   CALENDAR_DEFAULT_COLOR,
   type GoogleCalendarEntry,
 } from '@/lib/types';
+import PageHeader from '@/components/PageHeader';
 
 interface GoogleEvent {
   uid: string;
@@ -465,17 +466,21 @@ export default function CalendarPage() {
 
   return (
     <div style={{ paddingBottom: 'calc(var(--nav-height) + env(safe-area-inset-bottom) + 24px)' }}>
-      <div className="flex items-center justify-between mb-4">
-        <h1 style={{ marginBottom: 0 }}>Calendar 📆</h1>
-        <button
-          type="button"
-          onClick={goToday}
-          className="btn"
-          style={{ padding: '6px 12px', fontSize: '0.85rem', width: 'auto', borderRadius: 999, background: 'var(--surface-hover)', color: 'var(--text-primary)', touchAction: 'manipulation' }}
-        >
-          Today
-        </button>
-      </div>
+      <PageHeader
+        icon={CalendarDays}
+        color="#1E5AC9"
+        title="Calendar"
+        right={
+          <button
+            type="button"
+            onClick={goToday}
+            className="btn"
+            style={{ padding: '6px 12px', fontSize: '0.85rem', width: 'auto', borderRadius: 999, background: 'var(--surface-hover)', color: 'var(--text-primary)', touchAction: 'manipulation' }}
+          >
+            Today
+          </button>
+        }
+      />
 
       {/* View toggle */}
       <div style={{ display: 'flex', gap: 4, background: 'var(--surface-hover)', padding: 4, borderRadius: 999, marginBottom: 16 }}>

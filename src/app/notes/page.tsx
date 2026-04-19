@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { Plus, Trash2, ChevronDown, ChevronUp, Edit2 } from 'lucide-react';
+import { Plus, Trash2, ChevronDown, ChevronUp, Edit2, StickyNote } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import Fab from '@/components/Fab';
+import PageHeader from '@/components/PageHeader';
 
 interface NoteItem {
   id: string;
@@ -94,12 +95,16 @@ export default function NotesPage() {
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-4">
-        <h1 style={{ marginBottom: 0 }}>Whiteboard 📝</h1>
-        <button className="btn" style={{ padding: '8px 16px', width: 'auto' }} onClick={() => setIsCreating(!isCreating)}>
-          <Plus size={18} style={{ marginRight: 4 }} /> {isCreating ? 'Cancel' : 'New'}
-        </button>
-      </div>
+      <PageHeader
+        icon={StickyNote}
+        color="#C29500"
+        title="Whiteboard"
+        right={
+          <button className="btn" style={{ padding: '8px 16px', width: 'auto' }} onClick={() => setIsCreating(!isCreating)}>
+            <Plus size={18} style={{ marginRight: 4 }} /> {isCreating ? 'Cancel' : 'New'}
+          </button>
+        }
+      />
       
       {isCreating && (
         <div className="card" style={{ marginBottom: 24, border: '2px solid var(--accent-color)', padding: 20 }}>

@@ -1,11 +1,12 @@
 "use client";
 import { useState, useEffect } from 'react';
 import Image from 'next/image';
-import { Search, Save, ChevronDown, ChevronUp, Trash2, Edit2 } from 'lucide-react';
+import { Search, Save, ChevronDown, ChevronUp, Trash2, Edit2, NotebookText } from 'lucide-react';
 import { fetchRecipeFromUrl } from '@/app/actions/recipe';
 import { supabase } from '@/lib/supabase';
 import { safeImageUrl, safeHttpUrl } from '@/lib/url';
 import { asStringArray, type RecipeBody } from '@/lib/types';
+import PageHeader from '@/components/PageHeader';
 
 interface RecipeItem {
   id: string;
@@ -226,7 +227,7 @@ export default function RecipesPage() {
 
   return (
     <div>
-      <h1>Recipes 🍳</h1>
+      <PageHeader icon={NotebookText} color="#B87333" title="Recipes" />
 
       <div className="flex gap-2 mb-4">
         <button 

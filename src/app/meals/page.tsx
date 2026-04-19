@@ -1,11 +1,12 @@
 "use client";
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import Image from 'next/image';
-import { Plus, Trash2, Coffee, Sun, Moon, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Plus, Trash2, Coffee, Sun, Moon, ChevronLeft, ChevronRight, UtensilsCrossed } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { safeImageUrl } from '@/lib/url';
 import type { MealBody, RecipeBody } from '@/lib/types';
 import Fab from '@/components/Fab';
+import PageHeader from '@/components/PageHeader';
 
 const MEAL_SLOTS = [
   { id: 'Breakfast', icon: Coffee, color: '#f59e0b' },
@@ -280,9 +281,11 @@ export default function MealsPage() {
 
   return (
     <div style={{ paddingBottom: 'calc(var(--nav-height) + env(safe-area-inset-bottom) + 24px)' }}>
-      <div className="flex items-center justify-between mb-4" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <h1 style={{ marginBottom: 0 }}>Meals 🍽️</h1>
-        {weekOffset !== 0 && (
+      <PageHeader
+        icon={UtensilsCrossed}
+        color="#CC3333"
+        title="Meals"
+        right={weekOffset !== 0 ? (
           <button
             type="button"
             onClick={() => setWeekOffset(0)}
@@ -291,8 +294,8 @@ export default function MealsPage() {
           >
             Today
           </button>
-        )}
-      </div>
+        ) : undefined}
+      />
 
       {/* Week navigator — Monday→Sunday weeks, any offset */}
       <div

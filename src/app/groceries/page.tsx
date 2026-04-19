@@ -1,8 +1,9 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ShoppingBag } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { GroceryBody, GroceryStore } from '@/lib/types';
+import PageHeader from '@/components/PageHeader';
 
 interface GroceryItem {
   id: string;
@@ -139,7 +140,7 @@ export default function GroceriesPage() {
 
   return (
     <div>
-      <h1>Groceries 🛒</h1>
+      <PageHeader icon={ShoppingBag} color="#E05B1C" title="Groceries" />
       {renderSection('Regular Groceries', 'regular', regularItems, regularInput, setRegularInput)}
       {renderSection('Costco Run', 'costco', costcoItems, costcoInput, setCostcoInput)}
       {renderSection('Asian Market', 'asian', asianItems, asianInput, setAsianInput)}

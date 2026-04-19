@@ -102,22 +102,22 @@ export default function NotesPage() {
       
       {isCreating && (
         <div className="card" style={{ marginBottom: 24, border: '2px solid var(--accent-color)', padding: 20 }}>
-          <input 
-            type="text" 
-            className="input mb-4" 
+          <input
+            type="text"
+            className="input mb-4"
             placeholder="Note Title..."
             style={{ fontWeight: 'bold' }}
             value={title}
             onChange={e => setTitle(e.target.value)}
           />
-          <textarea 
-            className="input mb-4" 
-            placeholder="Write your note here..." 
-            style={{ height: 250, resize: 'none', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}
+          <textarea
+            className="input mb-4"
+            placeholder="Write your note here..."
+            style={{ height: 250, resize: 'none' }}
             value={body}
             onChange={e => setBody(e.target.value)}
           />
-          <button className="btn" onClick={addNote}>Save Note</button>
+          <button type="button" className="btn" style={{ touchAction: 'manipulation' }} onClick={addNote}>Save Note</button>
         </div>
       )}
 
@@ -126,62 +126,85 @@ export default function NotesPage() {
       {items.map(note => {
         const isExpanded = expandedId === note.id;
         const isEditing = editingId === note.id;
+        const bodyText = typeof note.body === 'string' ? note.body : '';
 
         if (isEditing) {
           return (
             <div key={note.id} className="card" style={{ marginBottom: 16, border: '2px solid var(--accent-color)', padding: 20 }}>
-              <input 
-                type="text" 
-                className="input mb-4" 
+              <input
+                type="text"
+                className="input mb-4"
                 placeholder="Note Title..."
                 style={{ fontWeight: 'bold' }}
                 value={editTitle}
                 onChange={e => setEditTitle(e.target.value)}
               />
-              <textarea 
-                className="input mb-4" 
-                placeholder="Write your note here..." 
-                style={{ height: 250, resize: 'none', overflowY: 'auto', WebkitOverflowScrolling: 'touch' }}
+              <textarea
+                className="input mb-4"
+                placeholder="Write your note here..."
+                style={{ height: 250, resize: 'none' }}
                 value={editBody}
                 onChange={e => setEditBody(e.target.value)}
               />
               <div className="flex gap-2">
-                <button className="btn" style={{ background: 'var(--success-color)' }} onClick={saveEdit}>Save Changes</button>
-                <button className="btn btn-secondary" onClick={cancelEdit}>Cancel</button>
+                <button type="button" className="btn" style={{ background: 'var(--success-color)', touchAction: 'manipulation' }} onClick={saveEdit}>Save Changes</button>
+                <button type="button" className="btn btn-secondary" style={{ touchAction: 'manipulation' }} onClick={cancelEdit}>Cancel</button>
               </div>
             </div>
           );
         }
-        
+
+        // Card is NOT clickable as a whole — only the header row is — so the
+        // Edit/Delete buttons are never competing with a parent click handler
+        // (which on iOS often makes nested taps feel unresponsive).
         return (
-          <div 
-            key={note.id} 
-            className="card" 
-            style={{ marginBottom: 16, cursor: 'pointer', padding: 0, overflow: 'hidden' }}
-            onClick={() => setExpandedId(isExpanded ? null : note.id)}
+          <div
+            key={note.id}
+            className="card"
+            style={{ marginBottom: 16, padding: 0, overflow: 'hidden' }}
           >
-            <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div style={{ paddingRight: 16, flex: 1, minWidth: 0 }}>
+            <div style={{ padding: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 8 }}>
+              <button
+                type="button"
+                onClick={() => setExpandedId(isExpanded ? null : note.id)}
+                aria-expanded={isExpanded}
+                style={{
+                  flex: 1,
+                  minWidth: 0,
+                  textAlign: 'left',
+                  background: 'transparent',
+                  border: 'none',
+                  padding: 0,
+                  cursor: 'pointer',
+                  color: 'inherit',
+                  font: 'inherit',
+                  touchAction: 'manipulation',
+                }}
+              >
                 <h3 style={{ marginBottom: 4, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{note.title}</h3>
                 {!isExpanded && (
                   <p className="text-sm" style={{ color: 'var(--text-secondary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {note.body.replace(/\n/g, ' ')}
+                    {bodyText.replace(/\n/g, ' ')}
                   </p>
                 )}
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              </button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
                 {isExpanded && (
                   <>
-                    <button 
-                      className="btn" 
-                      style={{ padding: '4px 8px', background: 'transparent', color: 'var(--text-secondary)', width: 'auto' }}
+                    <button
+                      type="button"
+                      className="btn"
+                      aria-label="Edit note"
+                      style={{ padding: '4px 8px', background: 'transparent', color: 'var(--text-secondary)', width: 'auto', touchAction: 'manipulation' }}
                       onClick={(e) => startEdit(note, e)}
                     >
-                       <Edit2 size={18} />
+                      <Edit2 size={18} />
                     </button>
-                    <button 
-                      className="btn" 
-                      style={{ padding: '4px 8px', background: 'transparent', color: 'var(--danger-color)', width: 'auto' }}
+                    <button
+                      type="button"
+                      className="btn"
+                      aria-label="Delete note"
+                      style={{ padding: '4px 8px', background: 'transparent', color: 'var(--danger-color)', width: 'auto', touchAction: 'manipulation' }}
                       onClick={(e) => deleteNote(note.id, e)}
                     >
                       <Trash2 size={20} />
@@ -191,11 +214,11 @@ export default function NotesPage() {
                 {isExpanded ? <ChevronUp size={20} className="text-secondary" /> : <ChevronDown size={20} className="text-secondary" />}
               </div>
             </div>
-            
+
             {isExpanded && (
               <div style={{ padding: '0 20px 24px 20px', borderTop: '1px solid rgba(0,0,0,0.03)', paddingTop: 16 }}>
                 <p className="text-sm" style={{ color: 'var(--text-primary)', whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>
-                  {note.body}
+                  {bodyText}
                 </p>
               </div>
             )}

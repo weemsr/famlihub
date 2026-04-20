@@ -1,5 +1,6 @@
 "use server";
 import * as cheerio from 'cheerio';
+import { promises as dns } from 'node:dns';
 import { safeImageUrl, safeHttpUrl } from '@/lib/url';
 
 // Narrow types for the shapes we read out of scraped JSON. The scraper
@@ -41,7 +42,56 @@ function flattenInstructions(steps: HowToStep[]): string[] {
   return result;
 }
 
-function isUrlSafe(input: string): boolean {
+function isPrivateIPv4(ip: string): boolean {
+  const parts = ip.split('.').map(Number);
+  if (parts.length !== 4 || parts.some(n => isNaN(n) || n < 0 || n > 255)) return true; // malformed → reject
+  const [a, b] = parts;
+  if (a === 10) return true;
+  if (a === 127) return true;
+  if (a === 0) return true;
+  if (a === 169 && b === 254) return true; // link-local + AWS metadata
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a >= 224) return true; // multicast + reserved
+  return false;
+}
+
+function isPrivateIPv6(ip: string): boolean {
+  const lower = ip.toLowerCase().replace(/^\[|\]$/g, '');
+  if (lower === '::1' || lower === '::') return true;
+  if (lower.startsWith('fc') || lower.startsWith('fd')) return true; // ULA
+  if (lower.startsWith('fe80:')) return true; // link-local
+  if (lower.startsWith('ff')) return true; // multicast
+  // IPv4-mapped (::ffff:a.b.c.d)
+  const mapped = lower.match(/::ffff:(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})$/);
+  if (mapped) return isPrivateIPv4(mapped[1]);
+  return false;
+}
+
+function isPrivateAddress(ip: string): boolean {
+  return ip.includes(':') ? isPrivateIPv6(ip) : isPrivateIPv4(ip);
+}
+
+function isHostnameBlocked(hostname: string): boolean {
+  const h = hostname.toLowerCase();
+  if (h === 'localhost' || h === '[::1]') return true;
+  if (h.endsWith('.local') || h.endsWith('.internal') || h.endsWith('.localhost')) return true;
+  if (h === 'metadata.google.internal') return true;
+  return false;
+}
+
+/**
+ * SSRF guard. Rejects the URL if:
+ *   - protocol is not http/https
+ *   - hostname matches a known-local suffix
+ *   - the hostname resolves to any private/loopback/link-local address
+ *
+ * DNS is resolved here so a hostile domain that points at 127.0.0.1 (DNS
+ * rebinding) is blocked *before* we fetch. Even if the TTL is 0 and the
+ * name re-resolves during fetch, that's a narrow race on a Node fetch that
+ * has a 15s abort timeout.
+ */
+async function isUrlSafe(input: string): Promise<boolean> {
   let parsed: URL;
   try {
     parsed = new URL(input);
@@ -50,25 +100,30 @@ function isUrlSafe(input: string): boolean {
   }
   if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') return false;
   const hostname = parsed.hostname.toLowerCase();
-  // Block private/internal ranges and metadata endpoints
-  if (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') return false;
-  if (hostname.endsWith('.local') || hostname.endsWith('.internal')) return false;
-  if (hostname === '169.254.169.254') return false; // Cloud metadata
-  if (hostname === 'metadata.google.internal') return false;
-  // Block private IP ranges
-  const parts = hostname.split('.').map(Number);
-  if (parts.length === 4 && parts.every(n => !isNaN(n))) {
-    if (parts[0] === 10) return false;
-    if (parts[0] === 172 && parts[1] >= 16 && parts[1] <= 31) return false;
-    if (parts[0] === 192 && parts[1] === 168) return false;
-    if (parts[0] === 0) return false;
+  if (isHostnameBlocked(hostname)) return false;
+
+  // Literal IP → check directly, skip DNS.
+  const isLiteralIP = /^\d{1,3}(\.\d{1,3}){3}$/.test(hostname) || hostname.includes(':');
+  if (isLiteralIP) {
+    return !isPrivateAddress(hostname);
   }
-  return true;
+
+  // Hostname → resolve and reject if any resolved address is private.
+  try {
+    const addrs = await dns.lookup(hostname, { all: true, verbatim: true });
+    if (addrs.length === 0) return false;
+    for (const { address } of addrs) {
+      if (isPrivateAddress(address)) return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 export async function fetchRecipeFromUrl(url: string) {
   try {
-    if (!isUrlSafe(url)) {
+    if (!(await isUrlSafe(url))) {
       return { success: false, error: 'Invalid or blocked URL. Only public http/https URLs are allowed.' };
     }
 

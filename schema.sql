@@ -24,3 +24,9 @@ CREATE POLICY "Users can update own items"
 
 CREATE POLICY "Users can delete own items"
   ON items FOR DELETE USING (auth.uid() = user_id);
+
+-- Every list page filters by (user_id, type). Composite index keeps those
+-- queries index-only as the table grows. Safe to add to a populated table —
+-- Postgres does an ACCESS SHARE lock, rows are not touched or rewritten.
+CREATE INDEX IF NOT EXISTS items_user_id_type_idx
+  ON items (user_id, type);

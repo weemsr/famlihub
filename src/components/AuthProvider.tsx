@@ -35,9 +35,17 @@ export default function AuthProvider({ children }: { children: React.ReactNode }
     e.preventDefault();
     setMsg('');
     if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password });
-      if (error) setMsg(error.message);
-      else setMsg('Check your email for the login link!');
+      const { data, error } = await supabase.auth.signUp({ email, password });
+      if (error) {
+        setMsg(error.message);
+        return;
+      }
+      // If the Supabase project requires email confirmation, no session is
+      // returned and the user must verify before signing in. Otherwise the
+      // onAuthStateChange listener above picks up the new session.
+      if (!data.session) {
+        setMsg('Account created. Check your email to confirm, then sign in.');
+      }
     } else {
       const { error } = await supabase.auth.signInWithPassword({ email, password });
       if (error) setMsg(error.message);

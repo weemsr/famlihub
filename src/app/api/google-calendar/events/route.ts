@@ -71,7 +71,21 @@ function readCalendarEntries(body: SettingBody | null): GoogleCalendarEntry[] {
   return [];
 }
 
+// Short-TTL in-memory cache for Google ICS bodies. Survives across requests
+// on a warm serverless instance, gets rebuilt on cold start — good enough for
+// a personal app. Google's iCal refresh cadence is on the order of hours, so
+// a few minutes of staleness is invisible in practice.
+const ICS_TTL_MS = 5 * 60 * 1000;
+type CacheEntry = { text: string; expiresAt: number };
+const icsCache = new Map<string, CacheEntry>();
+
 async function fetchIcs(url: string): Promise<{ ok: true; text: string } | { ok: false; message: string }> {
+  const now = Date.now();
+  const cached = icsCache.get(url);
+  if (cached && cached.expiresAt > now) {
+    return { ok: true, text: cached.text };
+  }
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
@@ -82,7 +96,18 @@ async function fetchIcs(url: string): Promise<{ ok: true; text: string } | { ok:
     });
     clearTimeout(timeout);
     if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
-    return { ok: true, text: await res.text() };
+    const text = await res.text();
+    icsCache.set(url, { text, expiresAt: now + ICS_TTL_MS });
+    // Bound memory: if the map grows past 500 entries (shared tenant, wide
+    // usage) drop the oldest half. Plenty of headroom for any realistic
+    // personal deployment.
+    if (icsCache.size > 500) {
+      const cutoff = now;
+      for (const [k, v] of icsCache) {
+        if (v.expiresAt <= cutoff) icsCache.delete(k);
+      }
+    }
+    return { ok: true, text };
   } catch (err) {
     return { ok: false, message: err instanceof Error ? err.message : 'fetch failed' };
   }

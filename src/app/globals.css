@@ -266,6 +266,44 @@ textarea.input {
 .mb-4 { margin-bottom: 16px; }
 .w-full { width: 100%; }
 
+/* Shared bottom-sheet modal (used by meals add, maintenance add/edit, etc.)
+   Keeps the slide-up animation in one place so each modal doesn't ship its
+   own <style> block with duplicated keyframes. */
+.bottom-sheet-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+
+.bottom-sheet {
+  background: var(--surface-color);
+  width: 100%;
+  max-width: 600px;
+  border-top-left-radius: 24px;
+  border-top-right-radius: 24px;
+  padding: 24px;
+  box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.1);
+  animation: bottomSheetSlideUp 0.25s ease-out forwards;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+@keyframes bottomSheetSlideUp {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Form label used inside bottom sheets / modals. */
+.form-label {
+  display: block;
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
 /* Checkbox specific */
 .checkbox-row {
   display: flex;

@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Scratch / one-off recipe-scraper experiments kept out of the build.
+    "scratch/**",
   ]),
 ]);
 

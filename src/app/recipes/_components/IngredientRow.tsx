@@ -1,0 +1,57 @@
+"use client";
+import { useState } from 'react';
+import { supabase } from '@/lib/supabase';
+
+export default function IngredientRow({ ing }: { ing: string }) {
+  const [showOptions, setShowOptions] = useState(false);
+  const [addingState, setAddingState] = useState<'idle' | 'adding' | 'success'>('idle');
+
+  const addToGrocery = async (store: 'regular' | 'costco' | 'asian') => {
+    setAddingState('adding');
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) { setAddingState('idle'); return; }
+
+    const cleanText = ing.replace(/<[^>]*>?/gm, '');
+
+    const { error } = await supabase.from('items').insert({
+      type: 'grocery',
+      title: cleanText,
+      body: { store },
+      user_id: userData.user.id,
+    });
+
+    if (error) { setAddingState('idle'); return; }
+
+    setAddingState('success');
+    setShowOptions(false);
+    setTimeout(() => setAddingState('idle'), 2000);
+  };
+
+  return (
+    <li style={{ marginBottom: 12, display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
+        <span style={{ flex: 1, paddingTop: 2 }}>{ing.replace(/<[^>]*>?/gm, '')}</span>
+
+        {addingState === 'success' ? (
+          <span style={{ color: 'var(--accent-color)', fontSize: 13, fontWeight: 'bold', minWidth: 50, textAlign: 'right' }}>Added! ✓</span>
+        ) : (
+          <button
+            className="btn"
+            style={{ padding: '4px 12px', fontSize: 12, width: 'auto', minWidth: 60, background: 'var(--surface-hover)', color: 'var(--text-primary)' }}
+            onClick={() => setShowOptions(!showOptions)}
+          >
+            + Add
+          </button>
+        )}
+      </div>
+
+      {showOptions && addingState !== 'success' && (
+        <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+          <button className="btn" style={{ padding: '4px 10px', fontSize: 12, width: 'auto', background: 'var(--accent-color)', color: 'white' }} onClick={() => addToGrocery('regular')}>Reg</button>
+          <button className="btn" style={{ padding: '4px 10px', fontSize: 12, width: 'auto', background: 'var(--accent-color)', color: 'white' }} onClick={() => addToGrocery('costco')}>Costco</button>
+          <button className="btn" style={{ padding: '4px 10px', fontSize: 12, width: 'auto', background: 'var(--accent-color)', color: 'white' }} onClick={() => addToGrocery('asian')}>Asian</button>
+        </div>
+      )}
+    </li>
+  );
+}

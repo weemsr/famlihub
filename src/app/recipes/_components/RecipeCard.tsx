@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { ChevronDown, ChevronUp, Trash2, Edit2, RotateCcw } from 'lucide-react';
+import { ChevronDown, ChevronUp, Trash2, Edit2 } from 'lucide-react';
 import { asStringArray, type RecipeBody } from '@/lib/types';
 import { safeImageUrl, safeHttpUrl } from '@/lib/url';
 import IngredientRow from './IngredientRow';
@@ -51,27 +51,28 @@ export default function RecipeCard({
 
   const originalServings = typeof body.servings === 'number' && body.servings > 0 ? body.servings : undefined;
 
-  // Local per-card scaling state. If servings is known, `targetServings` is
-  // the user's desired yield; otherwise `multiplier` is a direct scale.
-  const [targetServings, setTargetServings] = useState<number | undefined>(originalServings);
-  const [multiplier, setMultiplier] = useState<number>(1);
+  type ScaleMode = '1' | '1.5' | '2' | 'custom';
+  const [scaleMode, setScaleMode] = useState<ScaleMode>('1');
+  const [customValue, setCustomValue] = useState<string>(originalServings ? String(originalServings) : '1');
 
   useEffect(() => {
-    setTargetServings(originalServings);
-    setMultiplier(1);
+    setScaleMode('1');
+    setCustomValue(originalServings ? String(originalServings) : '1');
   }, [originalServings, recipe.id]);
 
-  const scaleFactor = originalServings && targetServings && targetServings > 0
-    ? targetServings / originalServings
-    : multiplier;
+  let scaleFactor = 1;
+  if (scaleMode === 'custom') {
+    const v = parseFloat(customValue);
+    if (Number.isFinite(v) && v > 0) {
+      scaleFactor = originalServings ? v / originalServings : v;
+    }
+  } else {
+    scaleFactor = parseFloat(scaleMode);
+  }
 
-  const scaleLabel = scaleFactor === 1 ? '' : `× ${scaleFactor.toFixed(2).replace(/\.?0+$/, '')}`;
-  const showReset = scaleFactor !== 1;
-
-  const resetScale = () => {
-    setTargetServings(originalServings);
-    setMultiplier(1);
-  };
+  const scaledServings = originalServings
+    ? Math.round(originalServings * scaleFactor * 10) / 10
+    : undefined;
 
   return (
     <div style={{ borderBottom: '1px solid var(--hairline)' }}>
@@ -169,66 +170,86 @@ export default function RecipeCard({
           {!isEditing && (
             <div
               style={{
-                display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap',
-                padding: '10px 14px', marginBottom: 16,
+                display: 'flex', flexDirection: 'column', gap: 10,
+                padding: '12px 14px', marginBottom: 16,
                 background: 'var(--surface-hover)', borderRadius: 12,
-                fontSize: 14, color: 'var(--text-primary)',
               }}
             >
-              {originalServings ? (
-                <>
-                  <span style={{ color: 'var(--text-secondary)' }}>Serves</span>
-                  <strong>{originalServings}</strong>
-                  <span style={{ color: 'var(--text-secondary)' }}>→</span>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-secondary)', letterSpacing: 0.3, textTransform: 'uppercase' }}>
+                  Scale
+                </span>
+                {originalServings && (
+                  <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                    Serves <strong style={{ color: 'var(--text-primary)' }}>{originalServings}</strong>
+                    {scaleFactor !== 1 && scaledServings && (
+                      <>
+                        <span style={{ margin: '0 6px' }}>→</span>
+                        <strong style={{ color: 'var(--accent-color)' }}>{scaledServings}</strong>
+                      </>
+                    )}
+                  </span>
+                )}
+              </div>
+
+              <div
+                role="group"
+                aria-label="Scale ingredients"
+                style={{
+                  display: 'inline-flex', gap: 4, padding: 4,
+                  background: 'var(--background)', borderRadius: 999,
+                  border: '1px solid var(--hairline)', alignSelf: 'flex-start',
+                }}
+              >
+                {(['1', '1.5', '2', 'custom'] as ScaleMode[]).map(mode => {
+                  const active = scaleMode === mode;
+                  const label = mode === 'custom' ? 'Custom' : `${mode}×`;
+                  return (
+                    <button
+                      key={mode}
+                      type="button"
+                      onClick={() => setScaleMode(mode)}
+                      aria-pressed={active}
+                      style={{
+                        padding: '6px 16px',
+                        fontSize: 13,
+                        fontWeight: 600,
+                        background: active ? 'var(--accent-color)' : 'transparent',
+                        color: active ? '#fff' : 'var(--text-secondary)',
+                        border: 'none',
+                        borderRadius: 999,
+                        cursor: 'pointer',
+                        transition: 'background 120ms ease, color 120ms ease',
+                        minWidth: mode === 'custom' ? 72 : 52,
+                      }}
+                    >
+                      {label}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {scaleMode === 'custom' && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13 }}>
+                  <label style={{ color: 'var(--text-secondary)' }} htmlFor={`custom-scale-${recipe.id}`}>
+                    {originalServings ? 'Target servings' : 'Multiplier'}
+                  </label>
                   <input
-                    type="number"
-                    inputMode="numeric"
-                    min={1}
-                    aria-label="Scale to servings"
-                    value={targetServings ?? ''}
-                    onChange={e => {
-                      const n = parseInt(e.target.value, 10);
-                      setTargetServings(Number.isFinite(n) && n > 0 ? n : undefined);
-                    }}
-                    style={{
-                      width: 64, padding: '4px 8px', fontSize: 14, fontWeight: 600,
-                      border: '1px solid var(--hairline)', borderRadius: 8,
-                      background: 'var(--background)', color: 'var(--text-primary)',
-                    }}
-                  />
-                </>
-              ) : (
-                <>
-                  <span style={{ color: 'var(--text-secondary)' }}>Scale</span>
-                  <input
+                    id={`custom-scale-${recipe.id}`}
                     type="number"
                     inputMode="decimal"
-                    min={0}
-                    step={0.5}
-                    aria-label="Scale multiplier"
-                    value={multiplier}
-                    onChange={e => {
-                      const v = parseFloat(e.target.value);
-                      setMultiplier(Number.isFinite(v) && v > 0 ? v : 1);
-                    }}
+                    min={originalServings ? 1 : 0}
+                    step={originalServings ? 1 : 0.5}
+                    value={customValue}
+                    onChange={e => setCustomValue(e.target.value)}
                     style={{
-                      width: 72, padding: '4px 8px', fontSize: 14, fontWeight: 600,
+                      width: 80, padding: '6px 10px', fontSize: 14, fontWeight: 600,
                       border: '1px solid var(--hairline)', borderRadius: 8,
                       background: 'var(--background)', color: 'var(--text-primary)',
                     }}
                   />
-                  <span style={{ color: 'var(--text-secondary)' }}>×</span>
-                </>
-              )}
-              {scaleLabel && <span style={{ color: 'var(--accent-color)', fontWeight: 600, marginLeft: 4 }}>{scaleLabel}</span>}
-              {showReset && (
-                <button
-                  className="btn"
-                  style={{ padding: '4px 10px', fontSize: 12, width: 'auto', marginLeft: 'auto', background: 'transparent', color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 4 }}
-                  onClick={resetScale}
-                >
-                  <RotateCcw size={14} /> Reset
-                </button>
+                  {!originalServings && <span style={{ color: 'var(--text-secondary)' }}>×</span>}
+                </div>
               )}
             </div>
           )}

@@ -15,6 +15,8 @@ export default function RecipeImporter({
   setManualTitle,
   manualImage,
   setManualImage,
+  manualServings,
+  setManualServings,
   manualIngredients,
   setManualIngredients,
   manualInstructions,
@@ -32,6 +34,8 @@ export default function RecipeImporter({
   setManualTitle: (v: string) => void;
   manualImage: string;
   setManualImage: (v: string) => void;
+  manualServings: string;
+  setManualServings: (v: string) => void;
   manualIngredients: string;
   setManualIngredients: (v: string) => void;
   manualInstructions: string;
@@ -114,6 +118,16 @@ export default function RecipeImporter({
               placeholder="Image URL (Optional)"
               value={manualImage}
               onChange={e => setManualImage(e.target.value)}
+            />
+
+            <input
+              type="number"
+              inputMode="numeric"
+              min={1}
+              className="input mb-4"
+              placeholder="Servings (Optional — enables ingredient scaling)"
+              value={manualServings}
+              onChange={e => setManualServings(e.target.value)}
             />
 
             <textarea

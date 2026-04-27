@@ -22,6 +22,7 @@ export interface RecipeBody {
   instructions?: unknown; // scraped content — validate at render
   image?: string;
   sourceUrl?: string;
+  servings?: number; // original yield, used as the base for ingredient scaling
 }
 
 export interface MealBody {

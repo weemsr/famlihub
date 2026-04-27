@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { Search, NotebookText } from 'lucide-react';
 import { fetchRecipeFromUrl } from '@/app/actions/recipe';
 import { supabase } from '@/lib/supabase';
-import { asStringArray } from '@/lib/types';
+import { asStringArray, type RecipeBody } from '@/lib/types';
 import PageHeader from '@/components/PageHeader';
 import RecipeImporter, { type CreationMode } from './_components/RecipeImporter';
 import RecipeCard, { type RecipeItem } from './_components/RecipeCard';
@@ -20,10 +20,12 @@ export default function RecipesPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editIngredients, setEditIngredients] = useState('');
   const [editInstructions, setEditInstructions] = useState('');
+  const [editServings, setEditServings] = useState('');
 
   const [creationMode, setCreationMode] = useState<CreationMode>('link');
   const [manualTitle, setManualTitle] = useState('');
   const [manualImage, setManualImage] = useState('');
+  const [manualServings, setManualServings] = useState('');
   const [manualIngredients, setManualIngredients] = useState('');
   const [manualInstructions, setManualInstructions] = useState('');
 
@@ -64,6 +66,7 @@ export default function RecipesPage() {
         instructions: res.recipe.instructions,
         image: res.recipe.image,
         sourceUrl: res.recipe.sourceUrl,
+        ...(res.recipe.servings ? { servings: res.recipe.servings } : {}),
       },
       user_id: userData.user.id,
     }).select().single();
@@ -86,6 +89,8 @@ export default function RecipesPage() {
 
     const ings = manualIngredients.split('\n').filter(i => i.trim() !== '');
     const insts = manualInstructions.split('\n').filter(i => i.trim() !== '');
+    const parsedServings = parseInt(manualServings, 10);
+    const servings = Number.isFinite(parsedServings) && parsedServings > 0 ? parsedServings : undefined;
 
     const { data, error: dbError } = await supabase.from('items').insert({
       type: 'recipe',
@@ -95,6 +100,7 @@ export default function RecipesPage() {
         instructions: insts,
         image: manualImage.trim(),
         sourceUrl: '',
+        ...(servings ? { servings } : {}),
       },
       user_id: userData.user.id,
     }).select().single();
@@ -106,6 +112,7 @@ export default function RecipesPage() {
       setExpandedId(data.id);
       setManualTitle('');
       setManualImage('');
+      setManualServings('');
       setManualIngredients('');
       setManualInstructions('');
       setCreationMode('link');
@@ -132,6 +139,7 @@ export default function RecipesPage() {
 
     setEditIngredients(cleanIngs.join('\n'));
     setEditInstructions(cleanInsts.join('\n'));
+    setEditServings(recipe.body?.servings ? String(recipe.body.servings) : '');
     setExpandedId(recipe.id);
   };
 
@@ -141,14 +149,17 @@ export default function RecipesPage() {
 
     const newIngredients = editIngredients.split('\n').filter(i => i.trim() !== '');
     const newInstructions = editInstructions.split('\n').filter(i => i.trim() !== '');
+    const parsedServings = parseInt(editServings, 10);
+    const servings = Number.isFinite(parsedServings) && parsedServings > 0 ? parsedServings : undefined;
 
     const recipeToUpdate = recipes.find(r => r.id === editingId);
     if (!recipeToUpdate) return;
 
-    const updatedBody = {
+    const updatedBody: RecipeBody = {
       ...recipeToUpdate.body,
       ingredients: newIngredients,
       instructions: newInstructions,
+      servings,
     };
 
     const prevRecipes = recipes;
@@ -177,6 +188,8 @@ export default function RecipesPage() {
         setManualTitle={setManualTitle}
         manualImage={manualImage}
         setManualImage={setManualImage}
+        manualServings={manualServings}
+        setManualServings={setManualServings}
         manualIngredients={manualIngredients}
         setManualIngredients={setManualIngredients}
         manualInstructions={manualInstructions}
@@ -216,11 +229,13 @@ export default function RecipesPage() {
               editTitle={editTitle}
               editIngredients={editIngredients}
               editInstructions={editInstructions}
+              editServings={editServings}
               onStartEdit={startEdit}
               onSaveEdit={saveEdit}
               onChangeEditTitle={setEditTitle}
               onChangeEditIngredients={setEditIngredients}
               onChangeEditInstructions={setEditInstructions}
+              onChangeEditServings={setEditServings}
               onDelete={deleteRecipe}
             />
           );

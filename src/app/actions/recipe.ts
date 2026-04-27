@@ -2,6 +2,7 @@
 import * as cheerio from 'cheerio';
 import { promises as dns } from 'node:dns';
 import { safeImageUrl, safeHttpUrl } from '@/lib/url';
+import { parseRecipeYield } from '@/lib/recipe-scale';
 
 // Narrow types for the shapes we read out of scraped JSON. The scraper
 // traverses untyped JSON-LD / Next.js data, so we keep these loose but
@@ -158,6 +159,7 @@ export async function fetchRecipeFromUrl(url: string) {
     let image = '';
     let ingredients: string[] = [];
     let instructions: string[] = [];
+    let servings: number | undefined;
 
     // 0. Try Next.js __NEXT_DATA__ SSR JSON interception (madewithlau, etc.)
     const nextDataStr = $('#__NEXT_DATA__').html();
@@ -169,6 +171,7 @@ export async function fetchRecipeFromUrl(url: string) {
            if (found) return;
            if (!obj || typeof obj !== 'object') return;
            if (obj.ingredientsArray && obj.instructionsArray) {
+              servings = servings ?? parseRecipeYield(obj.servings ?? obj.yields ?? obj.yield);
               // Handle ingredient sections (madewithlau format: mix of section headers and ingredients)
               ingredients = obj.ingredientsArray
                 .filter((i: any) => i._type !== 'ingredientSection' && i.item)
@@ -196,6 +199,7 @@ export async function fetchRecipeFromUrl(url: string) {
            }
            // Also look for recipeIngredient / recipeInstructions in NEXT_DATA (some sites embed JSON-LD-like data)
            if (obj.recipeIngredient && Array.isArray(obj.recipeIngredient) && obj.recipeIngredient.length > 0) {
+              servings = servings ?? parseRecipeYield(obj.recipeYield ?? obj.yield);
               ingredients = obj.recipeIngredient;
               if (Array.isArray(obj.recipeInstructions)) {
                 instructions = flattenInstructions(obj.recipeInstructions);
@@ -234,6 +238,7 @@ export async function fetchRecipeFromUrl(url: string) {
     if (recipeData) {
       titleRaw = recipeData.name || titleRaw;
       title = titleRaw.split(' - ')[0].split(' | ')[0].trim();
+      servings = servings ?? parseRecipeYield(recipeData.recipeYield ?? recipeData.yield);
     }
 
     if (recipeData?.image && !image) {
@@ -337,7 +342,7 @@ export async function fetchRecipeFromUrl(url: string) {
     const safeImage = safeImageUrl(image) || '';
     const safeSource = safeHttpUrl(url) || '';
 
-    return { success: true, recipe: { title, ingredients, instructions, image: safeImage, sourceUrl: safeSource } };
+    return { success: true, recipe: { title, ingredients, instructions, image: safeImage, sourceUrl: safeSource, servings } };
 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to import recipe.';

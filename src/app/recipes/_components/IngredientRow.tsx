@@ -1,21 +1,23 @@
 "use client";
 import { useState } from 'react';
 import { supabase } from '@/lib/supabase';
+import { scaleIngredient } from '@/lib/recipe-scale';
 
-export default function IngredientRow({ ing }: { ing: string }) {
+export default function IngredientRow({ ing, scaleFactor = 1 }: { ing: string; scaleFactor?: number }) {
   const [showOptions, setShowOptions] = useState(false);
   const [addingState, setAddingState] = useState<'idle' | 'adding' | 'success'>('idle');
+
+  const cleanText = ing.replace(/<[^>]*>?/gm, '');
+  const displayText = scaleFactor !== 1 ? scaleIngredient(cleanText, scaleFactor) : cleanText;
 
   const addToGrocery = async (store: 'regular' | 'costco' | 'asian') => {
     setAddingState('adding');
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) { setAddingState('idle'); return; }
 
-    const cleanText = ing.replace(/<[^>]*>?/gm, '');
-
     const { error } = await supabase.from('items').insert({
       type: 'grocery',
-      title: cleanText,
+      title: displayText,
       body: { store },
       user_id: userData.user.id,
     });
@@ -30,7 +32,7 @@ export default function IngredientRow({ ing }: { ing: string }) {
   return (
     <li style={{ marginBottom: 12, display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: 12 }}>
-        <span style={{ flex: 1, paddingTop: 2 }}>{ing.replace(/<[^>]*>?/gm, '')}</span>
+        <span style={{ flex: 1, paddingTop: 2 }}>{displayText}</span>
 
         {addingState === 'success' ? (
           <span style={{ color: 'var(--accent-color)', fontSize: 13, fontWeight: 'bold', minWidth: 50, textAlign: 'right' }}>Added! ✓</span>

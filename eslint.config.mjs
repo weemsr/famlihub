@@ -14,6 +14,8 @@ const eslintConfig = defineConfig([
     "next-env.d.ts",
     // Scratch / one-off recipe-scraper experiments kept out of the build.
     "scratch/**",
+    // Local agent worktrees are not part of the deployable app.
+    ".claude/**",
   ]),
 ]);
 

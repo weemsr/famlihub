@@ -9,11 +9,17 @@ import PageHeader from '@/components/PageHeader';
 import RecipeImporter, { type CreationMode } from './_components/RecipeImporter';
 import RecipeCard, { type RecipeItem } from './_components/RecipeCard';
 
+// Module-level cache: persists across client-side navigation so returning to
+// the Recipes tab renders the list instantly while we revalidate in the
+// background, instead of refetching from scratch and flashing a blank screen.
+let recipesCache: RecipeItem[] | null = null;
+
 export default function RecipesPage() {
   const [url, setUrl] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
-  const [recipes, setRecipes] = useState<RecipeItem[]>([]);
+  const [recipes, setRecipes] = useState<RecipeItem[]>(() => recipesCache ?? []);
+  const [listLoading, setListLoading] = useState(() => recipesCache === null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
@@ -32,17 +38,25 @@ export default function RecipesPage() {
 
   const loadRecipes = async () => {
     const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
+    if (!userData.user) { setListLoading(false); return; }
 
     const { data } = await supabase.from('items')
       .select('*')
       .eq('type', 'recipe')
       .order('created_at', { ascending: false });
 
-    if (data) setRecipes(data);
+    if (data) {
+      recipesCache = data as RecipeItem[];
+      setRecipes(data as RecipeItem[]);
+    }
+    setListLoading(false);
   };
 
   useEffect(() => { loadRecipes(); }, []);
+
+  // Keep the module cache in sync after the first load so add/edit/delete are
+  // reflected instantly when the user navigates back to this tab.
+  useEffect(() => { if (!listLoading) recipesCache = recipes; }, [recipes, listLoading]);
 
   const handleImport = async () => {
     if (!url) return;
@@ -214,7 +228,18 @@ export default function RecipesPage() {
       </div>
 
       <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
-        {filtered.length === 0 && (
+        {listLoading && recipes.length === 0 && (
+          <div>
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} style={{ padding: '20px', borderBottom: '1px solid var(--hairline)', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div className="skeleton" style={{ height: 16, width: '55%' }} />
+                <div className="skeleton" style={{ height: 12, width: '32%' }} />
+              </div>
+            ))}
+          </div>
+        )}
+
+        {!(listLoading && recipes.length === 0) && filtered.length === 0 && (
           <div style={{ padding: 24, textAlign: 'center', color: 'var(--text-secondary)' }}>No recipes found.</div>
         )}
 

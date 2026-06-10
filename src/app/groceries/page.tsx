@@ -62,18 +62,24 @@ export default function GroceriesPage() {
     if (store === 'costco') setCostcoInput('');
     if (store === 'asian') setAsianInput('');
 
-    const { error } = await supabase.from('items').insert({
+    const { data, error } = await supabase.from('items').insert({
       type: 'grocery',
       title: text,
       body: { store },
       user_id: userData.user.id
-    });
+    }).select().single();
 
     if (error) {
       if (store === 'regular') setRegularInput(prevRegular);
       if (store === 'costco') setCostcoInput(prevCostco);
       if (store === 'asian') setAsianInput(prevAsian);
+      return;
     }
+
+    // Show the new item immediately instead of waiting for the realtime echo.
+    // loadItems orders ascending, so append. The realtime subscription still
+    // fires loadItems() to reconcile (same row, no duplicate) and sync devices.
+    if (data) setItems(prev => [...prev, data as unknown as GroceryItem]);
   };
 
   const toggleItem = async (id: string, currentStatus: boolean) => {

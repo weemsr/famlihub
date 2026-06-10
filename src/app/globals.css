@@ -297,6 +297,23 @@ textarea.input {
   to   { transform: translateY(0); }
 }
 
+/* Skeleton placeholder — shown while list data loads so the screen never
+   looks blank. Gently pulses between full and reduced opacity. */
+.skeleton {
+  background: var(--surface-hover);
+  border-radius: 8px;
+  animation: skeletonPulse 1.2s ease-in-out infinite;
+}
+
+@keyframes skeletonPulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .skeleton { animation: none; }
+}
+
 /* Form label used inside bottom sheets / modals. */
 .form-label {
   display: block;

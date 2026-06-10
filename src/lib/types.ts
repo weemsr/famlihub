@@ -15,6 +15,9 @@ export type GroceryStore = 'regular' | 'costco' | 'asian';
 
 export interface GroceryBody {
   store?: GroceryStore;
+  /** Manual sort position within the store. Items without `order` fall back
+   *  to `created_at` ordering, so legacy rows stay in place until reordered. */
+  order?: number;
 }
 
 export interface RecipeBody {

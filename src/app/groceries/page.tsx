@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, ShoppingBag } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { GroceryBody, GroceryStore } from '@/lib/types';
+import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 
 interface GroceryItem {
@@ -51,6 +52,7 @@ export default function GroceriesPage() {
     if (store === 'asian') text = asianInput.trim();
 
     if (!text) return;
+    text = capLen(text, LIMITS.title);
 
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
@@ -100,10 +102,11 @@ export default function GroceriesPage() {
         <input 
           type="text" 
           className="input" 
-          placeholder={`Add to ${title}...`} 
+          placeholder={`Add to ${title}...`}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && addItem(store)}
+          maxLength={LIMITS.title}
         />
         <button className="btn" style={{ padding: '0 16px', width: 'auto' }} onClick={() => addItem(store)}>
           <Plus size={24} />

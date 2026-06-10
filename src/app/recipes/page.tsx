@@ -4,6 +4,7 @@ import { Search, NotebookText } from 'lucide-react';
 import { fetchRecipeFromUrl } from '@/app/actions/recipe';
 import { supabase } from '@/lib/supabase';
 import { asStringArray, type RecipeBody } from '@/lib/types';
+import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 import RecipeImporter, { type CreationMode } from './_components/RecipeImporter';
 import RecipeCard, { type RecipeItem } from './_components/RecipeCard';
@@ -87,14 +88,14 @@ export default function RecipesPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) { setLoading(false); return; }
 
-    const ings = manualIngredients.split('\n').filter(i => i.trim() !== '');
-    const insts = manualInstructions.split('\n').filter(i => i.trim() !== '');
+    const ings = manualIngredients.split('\n').filter(i => i.trim() !== '').map(l => capLen(l, LIMITS.line));
+    const insts = manualInstructions.split('\n').filter(i => i.trim() !== '').map(l => capLen(l, LIMITS.line));
     const parsedServings = parseInt(manualServings, 10);
     const servings = Number.isFinite(parsedServings) && parsedServings > 0 ? parsedServings : undefined;
 
     const { data, error: dbError } = await supabase.from('items').insert({
       type: 'recipe',
-      title: manualTitle.trim(),
+      title: capLen(manualTitle.trim(), LIMITS.title),
       body: {
         ingredients: ings,
         instructions: insts,
@@ -147,14 +148,15 @@ export default function RecipesPage() {
     e.stopPropagation();
     if (!editingId) return;
 
-    const newIngredients = editIngredients.split('\n').filter(i => i.trim() !== '');
-    const newInstructions = editInstructions.split('\n').filter(i => i.trim() !== '');
+    const newIngredients = editIngredients.split('\n').filter(i => i.trim() !== '').map(l => capLen(l, LIMITS.line));
+    const newInstructions = editInstructions.split('\n').filter(i => i.trim() !== '').map(l => capLen(l, LIMITS.line));
     const parsedServings = parseInt(editServings, 10);
     const servings = Number.isFinite(parsedServings) && parsedServings > 0 ? parsedServings : undefined;
 
     const recipeToUpdate = recipes.find(r => r.id === editingId);
     if (!recipeToUpdate) return;
 
+    const newTitle = capLen(editTitle, LIMITS.title);
     const updatedBody: RecipeBody = {
       ...recipeToUpdate.body,
       ingredients: newIngredients,
@@ -163,10 +165,10 @@ export default function RecipesPage() {
     };
 
     const prevRecipes = recipes;
-    setRecipes(recipes.map(r => r.id === editingId ? { ...r, title: editTitle, body: updatedBody } : r));
+    setRecipes(recipes.map(r => r.id === editingId ? { ...r, title: newTitle, body: updatedBody } : r));
     setEditingId(null);
 
-    const { error } = await supabase.from('items').update({ title: editTitle, body: updatedBody }).eq('id', editingId);
+    const { error } = await supabase.from('items').update({ title: newTitle, body: updatedBody }).eq('id', editingId);
     if (error) setRecipes(prevRecipes);
   };
 

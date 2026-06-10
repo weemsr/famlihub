@@ -2,12 +2,14 @@
 import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { UtensilsCrossed } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { LIMITS, capLen } from '@/lib/limits';
 import Fab from '@/components/Fab';
 import PageHeader from '@/components/PageHeader';
 import { MEAL_SLOTS, type MealItem, type RecipeItem } from './_components/constants';
 import WeekNavigator from './_components/WeekNavigator';
 import DayCard from './_components/DayCard';
 import MealModal from './_components/MealModal';
+import MealRecipeViewer from './_components/MealRecipeViewer';
 
 // Local-midnight timestamp for "today". Used to detect midnight rollover so the
 // week view always shows the correct Monday–Sunday window.
@@ -32,6 +34,7 @@ export default function MealsPage() {
   const [todayKey, setTodayKey] = useState(getTodayKey);
 
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [viewMeal, setViewMeal] = useState<{ meal: MealItem; recipe: RecipeItem; slotId: string } | null>(null);
   const [activeDay, setActiveDay] = useState('');
   const [activeDayLabel, setActiveDayLabel] = useState('');
   const [activeMeal, setActiveMeal] = useState('');
@@ -174,8 +177,8 @@ export default function MealsPage() {
       dayLabel: activeDayLabel,
       mealId: activeMeal,
       recipeId: selectedRecipeId,
-      customName: customName.trim(),
-      note: mealNote.trim(),
+      customName: capLen(customName.trim(), LIMITS.title),
+      note: capLen(mealNote.trim(), LIMITS.note),
     };
 
     const { error } = await supabase.from('items').insert({
@@ -247,6 +250,7 @@ export default function MealsPage() {
           recipeById={recipeById}
           onAdd={openAddModal}
           onRemove={removeMeal}
+          onView={(meal, recipe, slotId) => setViewMeal({ meal, recipe, slotId })}
         />
       ))}
 
@@ -273,7 +277,17 @@ export default function MealsPage() {
         />
       )}
 
-      {!isModalOpen && (
+      {viewMeal && (
+        <MealRecipeViewer
+          recipe={viewMeal.recipe}
+          slotLabel={viewMeal.slotId}
+          dayLabel={viewMeal.meal.body.dayLabel || dayLabelFor(viewMeal.meal.body.day)}
+          note={viewMeal.meal.body.note}
+          onClose={() => setViewMeal(null)}
+        />
+      )}
+
+      {!isModalOpen && !viewMeal && (
         <Fab
           ariaLabel="Add meal for today"
           onClick={openAddForToday}

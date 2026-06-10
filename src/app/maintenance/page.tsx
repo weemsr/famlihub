@@ -2,6 +2,7 @@
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { Wrench } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 import Fab from '@/components/Fab';
 import type { MaintenanceBody, MaintenanceItem } from '@/lib/types';
@@ -138,7 +139,7 @@ export default function MaintenancePage() {
   };
 
   const saveForm = async () => {
-    const title = form.title.trim();
+    const title = capLen(form.title.trim(), LIMITS.title);
     if (!title) { setFormError('Give this item a name.'); return; }
 
     const intervalDays = form.intervalPreset === 'custom'
@@ -158,7 +159,7 @@ export default function MaintenancePage() {
 
       const body: MaintenanceBody = { intervalDays };
       if (form.lastDone) body.lastDone = form.lastDone;
-      if (form.note.trim()) body.note = form.note.trim();
+      if (form.note.trim()) body.note = capLen(form.note.trim(), LIMITS.note);
 
       if (form.id) {
         const { error } = await supabase.from('items').update({ title, body }).eq('id', form.id);

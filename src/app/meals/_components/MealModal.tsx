@@ -1,5 +1,6 @@
 "use client";
 import { useEffect } from 'react';
+import { LIMITS } from '@/lib/limits';
 import type { RecipeItem } from './constants';
 
 export default function MealModal({
@@ -106,6 +107,7 @@ export default function MealModal({
             placeholder="e.g. In-N-Out Hot Dogs"
             value={customName}
             onChange={e => onChangeCustomName(e.target.value)}
+            maxLength={LIMITS.title}
             style={{ borderRadius: 16 }}
           />
         </div>
@@ -117,6 +119,7 @@ export default function MealModal({
             placeholder="e.g. Prep the chicken on Sunday"
             value={mealNote}
             onChange={e => onChangeNote(e.target.value)}
+            maxLength={LIMITS.note}
             style={{ borderRadius: 16, height: 80, resize: 'none' }}
           />
         </div>

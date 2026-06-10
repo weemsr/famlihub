@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, Edit2, StickyNote } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { LIMITS, capLen } from '@/lib/limits';
 import Fab from '@/components/Fab';
 import PageHeader from '@/components/PageHeader';
 
@@ -47,8 +48,8 @@ export default function NotesPage() {
       document.activeElement.blur();
     }
 
-    const t = title.trim();
-    const b = body.trim();
+    const t = capLen(title.trim(), LIMITS.title);
+    const b = capLen(body.trim(), LIMITS.body);
 
     const { data, error } = await supabase.from('items').insert({ type: 'note', title: t || 'Untitled Note', body: b, user_id: userData.user.id }).select().single();
     if (error) return; // Keep draft in form on failure
@@ -81,10 +82,12 @@ export default function NotesPage() {
     e.stopPropagation();
     if (!editingId) return;
 
+    const t = capLen(editTitle, LIMITS.title);
+    const b = capLen(editBody, LIMITS.body);
     const prevItems = items;
-    setItems(items.map(i => i.id === editingId ? { ...i, title: editTitle, body: editBody } : i));
+    setItems(items.map(i => i.id === editingId ? { ...i, title: t, body: b } : i));
     setEditingId(null);
-    const { error } = await supabase.from('items').update({ title: editTitle, body: editBody }).eq('id', editingId);
+    const { error } = await supabase.from('items').update({ title: t, body: b }).eq('id', editingId);
     if (error) setItems(prevItems);
   };
 
@@ -115,6 +118,7 @@ export default function NotesPage() {
             style={{ fontWeight: 'bold' }}
             value={title}
             onChange={e => setTitle(e.target.value)}
+            maxLength={LIMITS.title}
           />
           <textarea
             className="input mb-4"
@@ -122,6 +126,7 @@ export default function NotesPage() {
             style={{ height: 250, resize: 'none' }}
             value={body}
             onChange={e => setBody(e.target.value)}
+            maxLength={LIMITS.body}
           />
           <button type="button" className="btn" style={{ touchAction: 'manipulation' }} onClick={addNote}>Save Note</button>
         </div>
@@ -144,6 +149,7 @@ export default function NotesPage() {
                 style={{ fontWeight: 'bold' }}
                 value={editTitle}
                 onChange={e => setEditTitle(e.target.value)}
+                maxLength={LIMITS.title}
               />
               <textarea
                 className="input mb-4"
@@ -151,6 +157,7 @@ export default function NotesPage() {
                 style={{ height: 250, resize: 'none' }}
                 value={editBody}
                 onChange={e => setEditBody(e.target.value)}
+                maxLength={LIMITS.body}
               />
               <div className="flex gap-2">
                 <button type="button" className="btn" style={{ background: 'var(--success-color)', touchAction: 'manipulation' }} onClick={saveEdit}>Save Changes</button>

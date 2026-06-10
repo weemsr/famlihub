@@ -1,5 +1,5 @@
 import Image from 'next/image';
-import { Plus, Trash2 } from 'lucide-react';
+import { Plus, Trash2, ChevronRight } from 'lucide-react';
 import { safeImageUrl } from '@/lib/url';
 import { MEAL_SLOTS, type MealItem, type RecipeItem, type WeekDay } from './constants';
 
@@ -9,12 +9,14 @@ export default function DayCard({
   recipeById,
   onAdd,
   onRemove,
+  onView,
 }: {
   day: WeekDay;
   mealsBySlot: Map<string, MealItem[]>;
   recipeById: Map<string, RecipeItem>;
   onAdd: (dayKey: string, dayLabel: string, slotId: string) => void;
   onRemove: (mealId: string) => void;
+  onView: (meal: MealItem, recipe: RecipeItem, slotId: string) => void;
 }) {
   return (
     <div
@@ -64,30 +66,52 @@ export default function DayCard({
                   const linkedRecipe = meal.body?.recipeId ? recipeById.get(meal.body.recipeId) ?? null : null;
                   const thumb = safeImageUrl(linkedRecipe?.body?.image);
                   const displayTitle = linkedRecipe ? linkedRecipe.title : meal.body.customName || 'Meal';
+                  const content = (
+                    <>
+                      {thumb && (
+                        <Image
+                          src={thumb}
+                          alt="meal"
+                          width={40}
+                          height={40}
+                          style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
+                          unoptimized
+                        />
+                      )}
+                      <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0, textAlign: 'left' }}>
+                        <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {displayTitle}
+                        </span>
+                        {meal.body.note && (
+                          <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
+                            {meal.body.note}
+                          </span>
+                        )}
+                        {linkedRecipe && (
+                          <span style={{ fontSize: '0.78rem', color: 'var(--accent-color)', fontWeight: 600, marginTop: 2 }}>
+                            View recipe
+                          </span>
+                        )}
+                      </div>
+                    </>
+                  );
                   return (
                     <div key={meal.id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
-                        {thumb && (
-                          <Image
-                            src={thumb}
-                            alt="meal"
-                            width={40}
-                            height={40}
-                            style={{ borderRadius: 8, objectFit: 'cover', flexShrink: 0 }}
-                            unoptimized
-                          />
-                        )}
-                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                          <span style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {displayTitle}
-                          </span>
-                          {meal.body.note && (
-                            <span style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: 2, whiteSpace: 'pre-wrap' }}>
-                              {meal.body.note}
-                            </span>
-                          )}
+                      {linkedRecipe ? (
+                        <button
+                          type="button"
+                          aria-label={`View recipe: ${displayTitle}`}
+                          onClick={() => onView(meal, linkedRecipe, slot.id)}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0, background: 'transparent', border: 'none', padding: 0, cursor: 'pointer', color: 'inherit', font: 'inherit', touchAction: 'manipulation' }}
+                        >
+                          {content}
+                          <ChevronRight size={16} style={{ color: 'var(--text-secondary)', flexShrink: 0, marginLeft: 'auto' }} />
+                        </button>
+                      ) : (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flex: 1, minWidth: 0 }}>
+                          {content}
                         </div>
-                      </div>
+                      )}
                       <button
                         type="button"
                         aria-label="Remove meal"

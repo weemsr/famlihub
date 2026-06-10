@@ -3,6 +3,7 @@ import { useState, useEffect } from 'react';
 import { Plus, Trash2, Edit2, FolderPlus, CheckSquare } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { TodoBody } from '@/lib/types';
+import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 
 interface TodoItem {
@@ -69,11 +70,17 @@ export default function TodosPage() {
 
   useEffect(() => {
     loadItems();
+    const channel = supabase.channel('realtime:todos')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: 'type=eq.todo' }, () => {
+        loadItems();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
   }, []);
 
   const addItem = async () => {
     if (!input.trim()) return;
-    const title = input.trim();
+    const title = capLen(input.trim(), LIMITS.title);
     const cat = activeCategory;
     const prevInput = input;
 
@@ -122,9 +129,10 @@ export default function TodosPage() {
 
   const saveEdit = async (id: string) => {
     if (!editTitle.trim()) return;
-    setItems(items.map(i => i.id === id ? { ...i, title: editTitle } : i));
+    const title = capLen(editTitle.trim(), LIMITS.title);
+    setItems(items.map(i => i.id === id ? { ...i, title } : i));
     setEditingId(null);
-    await supabase.from('items').update({ title: editTitle }).eq('id', id);
+    await supabase.from('items').update({ title }).eq('id', id);
   };
 
   const activeItems = items.filter(i => !i.is_completed);
@@ -148,10 +156,11 @@ export default function TodosPage() {
             <input 
               type="text" 
               className="input" 
-              placeholder="Add a task..." 
+              placeholder="Add a task..."
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && addItem()}
+              maxLength={LIMITS.title}
               style={{ borderRadius: 16 }}
             />
             <button className="btn" style={{ padding: '0 16px', width: 'auto', borderRadius: 16 }} onClick={addItem}>
@@ -271,6 +280,7 @@ export default function TodosPage() {
                           onChange={e => setEditTitle(e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && saveEdit(item.id)}
                           autoFocus
+                          maxLength={LIMITS.title}
                           style={{ padding: '8px 16px' }}
                         />
                       ) : (

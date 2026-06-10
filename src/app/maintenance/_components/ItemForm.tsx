@@ -1,6 +1,7 @@
 "use client";
 import { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { LIMITS } from '@/lib/limits';
 import { INTERVAL_PRESETS, type FormState } from './utils';
 
 export default function ItemForm({
@@ -47,6 +48,7 @@ export default function ItemForm({
             placeholder="e.g. Oil change"
             value={form.title}
             onChange={e => onChange(f => ({ ...f, title: e.target.value }))}
+            maxLength={LIMITS.title}
             style={{ padding: '12px 16px' }}
           />
         </div>
@@ -124,6 +126,7 @@ export default function ItemForm({
             placeholder="e.g. Replace with XYZ model filter"
             value={form.note}
             onChange={e => onChange(f => ({ ...f, note: e.target.value }))}
+            maxLength={LIMITS.note}
             style={{ borderRadius: 16, height: 80, resize: 'none', padding: '12px 16px' }}
           />
         </div>

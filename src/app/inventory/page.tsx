@@ -2,6 +2,7 @@
 import { useState, useEffect } from 'react';
 import { Plus, Trash2, PackageOpen } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 
 interface InventoryItem {
@@ -34,7 +35,7 @@ export default function InventoryPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
-    const text = input.trim();
+    const text = capLen(input.trim(), LIMITS.title);
     const prevInput = input;
     setInput('');
     const { error } = await supabase.from('items').insert({ type: 'inventory', title: text, user_id: userData.user.id });
@@ -62,10 +63,11 @@ export default function InventoryPage() {
           <input 
             type="text" 
             className="input" 
-            placeholder="Add an ingredient..." 
+            placeholder="Add an ingredient..."
             value={input}
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && addItem()}
+            maxLength={LIMITS.title}
           />
           <button className="btn" style={{ padding: '0 16px', width: 'auto' }} onClick={addItem}>
             <Plus size={24} />

@@ -49,6 +49,19 @@ export interface MaintenanceBody {
 }
 
 /**
+ * Credit card the user wants to keep an eye on for annual-fee renewal.
+ * `cancelBy` is the deadline to decide whether to cancel before the next
+ * annual fee posts (typically a few weeks after the prior year's fee).
+ * Annual fee is stored in whole dollars.
+ */
+export interface CreditCardBody {
+  bank?: string;
+  annualFee?: number;
+  cancelBy?: string; // ISO yyyy-mm-dd
+  notes?: string;
+}
+
+/**
  * One Google Calendar the user has connected (via its secret iCal URL).
  * Multiple calendars are supported; each is tinted with its own color on
  * the Calendar tab. Stored as a list in a single "setting" items row with
@@ -95,6 +108,7 @@ export type MealItem = Item<MealBody>;
 export type NoteItem = Item<string> & { title: string };
 export type InventoryItem = Item<unknown> & { title: string };
 export type MaintenanceItem = Item<MaintenanceBody> & { title: string };
+export type CreditCardItem = Item<CreditCardBody> & { title: string };
 
 /**
  * Coerce an unknown value to a string[]. Handles the common scraped shapes:

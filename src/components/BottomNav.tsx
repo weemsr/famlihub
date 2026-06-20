@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { Home, CheckSquare, ShoppingCart, Utensils, PenTool, Package, Calendar, ChefHat, Wrench } from 'lucide-react';
+import { Home, CheckSquare, ShoppingCart, Utensils, PenTool, Package, Calendar, ChefHat, Wrench, CreditCard } from 'lucide-react';
 
 export default function BottomNav() {
   const pathname = usePathname();
@@ -16,6 +16,7 @@ export default function BottomNav() {
     { name: 'Notes', href: '/notes', icon: PenTool },
     { name: 'Pantry', href: '/inventory', icon: Package },
     { name: 'Calendar', href: '/calendar', icon: Calendar },
+    { name: 'Credit Card', href: '/credit-cards', icon: CreditCard },
     { name: 'Upkeep', href: '/maintenance', icon: Wrench },
   ];
 

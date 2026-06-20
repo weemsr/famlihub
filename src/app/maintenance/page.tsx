@@ -19,6 +19,13 @@ import {
   type FormState,
 } from './_components/utils';
 
+type MaintFilter = 'all' | 'attention' | 'on-track';
+const FILTERS: { id: MaintFilter; label: string }[] = [
+  { id: 'all', label: 'All' },
+  { id: 'attention', label: 'Needs attention' },
+  { id: 'on-track', label: 'On track' },
+];
+
 export default function MaintenancePage() {
   const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
   const todayIso = isoDay(today);
@@ -31,6 +38,8 @@ export default function MaintenancePage() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM);
   const [formSaving, setFormSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
+
+  const [filter, setFilter] = useState<MaintFilter>('all');
 
   const loadItems = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
@@ -68,6 +77,25 @@ export default function MaintenancePage() {
       return a.title.localeCompare(b.title);
     });
   }, [items, todayIso]);
+
+  // Counts per filter (anything that isn't on-track needs attention: overdue,
+  // due-soon, or never-done).
+  const counts = useMemo(() => {
+    let attention = 0, onTrack = 0;
+    for (const it of items) {
+      const { status } = statusFor(it.body || { intervalDays: 0 }, todayIso);
+      if (status === 'on-track') onTrack++; else attention++;
+    }
+    return { all: items.length, attention, 'on-track': onTrack } as Record<MaintFilter, number>;
+  }, [items, todayIso]);
+
+  const visibleItems = useMemo(() => {
+    if (filter === 'all') return sortedItems;
+    return sortedItems.filter(it => {
+      const { status } = statusFor(it.body || { intervalDays: 0 }, todayIso);
+      return filter === 'attention' ? status !== 'on-track' : status === 'on-track';
+    });
+  }, [sortedItems, filter, todayIso]);
 
   const addItem = async (title: string, intervalDays: number, lastDone?: string, note?: string): Promise<boolean> => {
     const { data: userData } = await supabase.auth.getUser();
@@ -196,9 +224,41 @@ export default function MaintenancePage() {
         <QuickStart seedBusy={seedBusy} onAddSeed={addSeed} onAddAll={addAllSeeds} />
       )}
 
-      {sortedItems.length > 0 && (
+      {items.length > 0 && (
+        <div style={{ display: 'flex', gap: 4, background: 'var(--surface-hover)', padding: 4, borderRadius: 999, marginBottom: 16 }}>
+          {FILTERS.map(f => {
+            const active = filter === f.id;
+            return (
+              <button
+                key={f.id}
+                type="button"
+                onClick={() => setFilter(f.id)}
+                aria-pressed={active}
+                style={{
+                  flex: 1,
+                  padding: '8px 8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                  lineHeight: 1.2,
+                  borderRadius: 999,
+                  background: active ? 'var(--surface-color)' : 'transparent',
+                  color: active ? 'var(--text-primary)' : 'var(--text-secondary)',
+                  boxShadow: active ? '0 1px 4px var(--hairline-strong)' : 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  touchAction: 'manipulation',
+                }}
+              >
+                {f.label} ({counts[f.id]})
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {visibleItems.length > 0 && (
         <div>
-          {sortedItems.map(item => (
+          {visibleItems.map(item => (
             <ItemCard
               key={item.id}
               item={item}
@@ -209,6 +269,12 @@ export default function MaintenancePage() {
             />
           ))}
         </div>
+      )}
+
+      {loaded && items.length > 0 && visibleItems.length === 0 && (
+        <p className="text-sm" style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '24px 0' }}>
+          {filter === 'attention' ? 'Nothing needs attention right now. 🎉' : 'Nothing is on track yet.'}
+        </p>
       )}
 
       {loaded && items.length === 0 && !showQuickStart && (

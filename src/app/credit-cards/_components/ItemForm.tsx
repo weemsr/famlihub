@@ -69,6 +69,22 @@ export default function ItemForm({
         </div>
 
         <div style={{ marginBottom: 16 }}>
+          <label className="form-label" htmlFor="cc-last4">Last 4 digits</label>
+          <input
+            id="cc-last4"
+            type="text"
+            inputMode="numeric"
+            autoComplete="off"
+            className="input"
+            placeholder="1234"
+            value={form.last4}
+            onChange={e => onChange(f => ({ ...f, last4: e.target.value.replace(/\D/g, '').slice(0, 4) }))}
+            maxLength={4}
+            style={{ padding: '12px 16px', letterSpacing: 2, width: 140 }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
           <label className="form-label" htmlFor="cc-fee">Annual fee</label>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: '1.05rem', color: 'var(--text-secondary)', fontWeight: 600 }}>$</span>

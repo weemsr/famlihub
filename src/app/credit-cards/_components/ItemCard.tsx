@@ -41,9 +41,14 @@ export default function ItemCard({
               <h3 style={{ marginBottom: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {item.title}
               </h3>
-              {body.bank && (
-                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600 }}>
-                  {body.bank}
+              {(body.bank || body.last4) && (
+                <div style={{ fontSize: '0.82rem', color: 'var(--text-secondary)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  {body.bank && <span>{body.bank}</span>}
+                  {body.last4 && (
+                    <span style={{ fontVariantNumeric: 'tabular-nums', letterSpacing: 1 }}>
+                      •••• {body.last4}
+                    </span>
+                  )}
                 </div>
               )}
             </div>

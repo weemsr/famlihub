@@ -13,6 +13,7 @@ export interface FormState {
   id?: string;
   title: string;
   bank: string;
+  last4: string;     // last 4 digits (kept as a string of up to 4 digits)
   annualFee: string; // string for input control; parsed at save
   cancelBy: string;  // YYYY-MM-DD
   notes: string;
@@ -21,6 +22,7 @@ export interface FormState {
 export const EMPTY_FORM: FormState = {
   title: '',
   bank: '',
+  last4: '',
   annualFee: '',
   cancelBy: '',
   notes: '',

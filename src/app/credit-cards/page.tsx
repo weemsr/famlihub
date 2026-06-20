@@ -107,6 +107,7 @@ export default function CreditCardsPage() {
       id: item.id,
       title: item.title,
       bank: body.bank || '',
+      last4: body.last4 || '',
       annualFee: typeof body.annualFee === 'number' ? String(body.annualFee) : '',
       cancelBy: body.cancelBy || '',
       notes: body.notes || '',
@@ -129,8 +130,11 @@ export default function CreditCardsPage() {
       const { data: userData } = await supabase.auth.getUser();
       if (!userData.user) throw new Error('Not signed in');
 
+      const last4 = form.last4.replace(/\D/g, '').slice(0, 4);
+
       const body: CreditCardBody = {};
       if (form.bank.trim()) body.bank = capLen(form.bank.trim(), LIMITS.title);
+      if (last4) body.last4 = last4;
       if (typeof annualFee === 'number') body.annualFee = annualFee;
       if (form.cancelBy) body.cancelBy = form.cancelBy;
       if (form.notes.trim()) body.notes = capLen(form.notes.trim(), LIMITS.note);

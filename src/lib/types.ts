@@ -56,6 +56,7 @@ export interface MaintenanceBody {
  */
 export interface CreditCardBody {
   bank?: string;
+  last4?: string; // last 4 digits, for identifying the physical card
   annualFee?: number;
   cancelBy?: string; // ISO yyyy-mm-dd
   notes?: string;

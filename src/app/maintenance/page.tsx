@@ -15,7 +15,6 @@ import {
   INTERVAL_PRESETS,
   isoDay,
   statusFor,
-  statusRank,
   type FormState,
 } from './_components/utils';
 
@@ -69,11 +68,14 @@ export default function MaintenancePage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // Rank by urgency: the item closest to needing maintenance comes first.
+  // `daysFromNow` is days until due (negative = overdue, 0 = due today /
+  // never-done), so ascending order surfaces the most-due item at the top.
   const sortedItems = useMemo(() => {
     return [...items].sort((a, b) => {
-      const sa = statusFor(a.body || { intervalDays: 0 }, todayIso).status;
-      const sb = statusFor(b.body || { intervalDays: 0 }, todayIso).status;
-      if (sa !== sb) return statusRank(sa) - statusRank(sb);
+      const ra = statusFor(a.body || { intervalDays: 0 }, todayIso);
+      const rb = statusFor(b.body || { intervalDays: 0 }, todayIso);
+      if (ra.daysFromNow !== rb.daysFromNow) return ra.daysFromNow - rb.daysFromNow;
       return a.title.localeCompare(b.title);
     });
   }, [items, todayIso]);

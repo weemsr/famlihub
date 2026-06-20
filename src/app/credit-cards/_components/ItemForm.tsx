@@ -41,20 +41,6 @@ export default function ItemForm({
         </div>
 
         <div style={{ marginBottom: 16 }}>
-          <label className="form-label" htmlFor="cc-title">Card name</label>
-          <input
-            id="cc-title"
-            type="text"
-            className="input"
-            placeholder="e.g. Sapphire Preferred"
-            value={form.title}
-            onChange={e => onChange(f => ({ ...f, title: e.target.value }))}
-            maxLength={LIMITS.title}
-            style={{ padding: '12px 16px' }}
-          />
-        </div>
-
-        <div style={{ marginBottom: 16 }}>
           <label className="form-label" htmlFor="cc-bank">CC Company / Bank</label>
           <input
             id="cc-bank"
@@ -63,6 +49,20 @@ export default function ItemForm({
             placeholder="e.g. Chase, Amex, Capital One"
             value={form.bank}
             onChange={e => onChange(f => ({ ...f, bank: e.target.value }))}
+            maxLength={LIMITS.title}
+            style={{ padding: '12px 16px' }}
+          />
+        </div>
+
+        <div style={{ marginBottom: 16 }}>
+          <label className="form-label" htmlFor="cc-title">Card name</label>
+          <input
+            id="cc-title"
+            type="text"
+            className="input"
+            placeholder="e.g. Sapphire Preferred"
+            value={form.title}
+            onChange={e => onChange(f => ({ ...f, title: e.target.value }))}
             maxLength={LIMITS.title}
             style={{ padding: '12px 16px' }}
           />

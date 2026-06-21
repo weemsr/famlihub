@@ -23,45 +23,34 @@ interface GroceryItem {
 }
 
 /**
- * Sort rule: items with a manual `body.order` come first, ordered by that
- * value. Items without (legacy rows) fall back to `created_at` ascending so
- * existing lists keep their familiar position until the user drags one.
+ * Sort rule: one continuous number line. An item's effective sort key is its
+ * `body.order` when set, otherwise its `created_at` epoch ms. Both
+ * Groceries-tab adds and Recipe-page "+ Add to grocery" stamp `order = Date.now()`
+ * on insert, so new items always land below everything else. Legacy rows
+ * without an `order` keep their creation-time position via the same scale.
  */
-function compareGrocery(a: GroceryItem, b: GroceryItem): number {
-  const ao = a.body?.order;
-  const bo = b.body?.order;
-  if (typeof ao === 'number' && typeof bo === 'number') return ao - bo;
-  if (typeof ao === 'number') return -1;
-  if (typeof bo === 'number') return 1;
-  const at = a.created_at ? new Date(a.created_at).getTime() : 0;
-  const bt = b.created_at ? new Date(b.created_at).getTime() : 0;
-  return at - bt;
+function effectiveOrder(item: GroceryItem): number {
+  const o = item.body?.order;
+  if (typeof o === 'number') return o;
+  return item.created_at ? new Date(item.created_at).getTime() : 0;
 }
 
-/** Order to assign a freshly added row so it lands at the bottom of its list. */
-function nextOrder(list: GroceryItem[]): number {
-  let max = 0;
-  for (const it of list) {
-    const o = it.body?.order;
-    if (typeof o === 'number' && o > max) max = o;
-  }
-  return max + 1;
+function compareGrocery(a: GroceryItem, b: GroceryItem): number {
+  return effectiveOrder(a) - effectiveOrder(b);
 }
 
 /**
  * Compute the new `order` for an item dropped between two neighbors. Uses the
- * midpoint of the neighbors' orders so only the moved row needs a DB write —
- * everything else keeps its existing order. Drops at the edges extend by 1.
+ * midpoint of the neighbors' effective orders so only the moved row needs a
+ * DB write. Drops at the edges anchor relative to the neighbor we have.
  */
 function orderForDrop(sortedList: GroceryItem[], destIndex: number): number {
   const before = sortedList[destIndex - 1];
   const after = sortedList[destIndex + 1];
-  const bo = before?.body?.order;
-  const ao = after?.body?.order;
-  if (typeof bo === 'number' && typeof ao === 'number') return (bo + ao) / 2;
-  if (typeof bo === 'number') return bo + 1;
-  if (typeof ao === 'number') return ao - 1;
-  return 1;
+  if (before && after) return (effectiveOrder(before) + effectiveOrder(after)) / 2;
+  if (before) return effectiveOrder(before) + 1;
+  if (after) return effectiveOrder(after) - 1;
+  return Date.now();
 }
 
 export default function GroceriesPage() {
@@ -123,9 +112,10 @@ export default function GroceriesPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
-    const list = store === 'regular' ? regularItems : store === 'costco' ? costcoItems : asianItems;
-    const order = nextOrder(list);
-    const body: GroceryBody = { store, order };
+    // Date.now() is on the same scale as `effectiveOrder`'s created_at
+    // fallback, so a new item always sorts to the true bottom of its list —
+    // including past legacy items that never got an `order` field set.
+    const body: GroceryBody = { store, order: Date.now() };
 
     const prevRegular = regularInput, prevCostco = costcoInput, prevAsian = asianInput;
     if (store === 'regular') setRegularInput('');

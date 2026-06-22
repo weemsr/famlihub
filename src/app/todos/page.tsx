@@ -175,13 +175,13 @@ export default function TodosPage() {
         const isCollapsed = !!collapsedCategories[categoryName];
         
         return (
-          <div 
-             key={categoryName} 
-             className="card" 
-             style={{ marginBottom: 24, padding: 0, overflow: 'hidden' }}
+          <div
+             key={categoryName}
+             className="card"
+             style={{ marginBottom: 24, padding: 0, overflow: 'visible' }}
           >
-            <div 
-               style={{ backgroundColor: 'var(--surface-hover)', padding: '12px 20px', borderBottom: isCollapsed ? 'none' : '1px solid var(--hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer' }}
+            <div
+               style={{ backgroundColor: 'var(--surface-hover)', padding: '12px 20px', borderBottom: isCollapsed ? 'none' : '1px solid var(--hairline)', display: 'flex', justifyContent: 'space-between', alignItems: 'center', cursor: 'pointer', borderTopLeftRadius: 'calc(var(--border-radius) - 1px)', borderTopRightRadius: 'calc(var(--border-radius) - 1px)', borderBottomLeftRadius: isCollapsed ? 'calc(var(--border-radius) - 1px)' : 0, borderBottomRightRadius: isCollapsed ? 'calc(var(--border-radius) - 1px)' : 0 }}
                onClick={() => toggleCategory(categoryName)}
             >
               <h2 style={{ fontSize: '1.1rem', marginBottom: 0, color: 'var(--text-primary)' }}>{categoryName} {catItems.length > 0 ? `(${catItems.length})` : ''}</h2>

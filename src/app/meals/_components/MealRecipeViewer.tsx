@@ -124,7 +124,7 @@ export default function MealRecipeViewer({
           </a>
         )}
 
-        <RecipeDisplay recipe={recipe} />
+        <RecipeDisplay recipe={recipe} showAddToGrocery />
       </div>
     </div>
   );

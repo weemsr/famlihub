@@ -13,6 +13,7 @@ import {
   isoDay,
   statusFor,
   type FormState,
+  fmtMoney,
 } from './_components/utils';
 
 type CardFilter = 'all' | 'attention' | 'safe';
@@ -183,7 +184,7 @@ export default function CreditCardsPage() {
 
   return (
     <div style={{ paddingBottom: 'calc(var(--nav-height) + env(safe-area-inset-bottom) + 24px)' }}>
-      <PageHeader icon={CreditCard} color="#1E3A8A" title="Credit Cards" />
+      <PageHeader icon={CreditCard} color="#3B82F6" title="Credit Cards" />
 
       {!loaded && (
         <p className="text-sm" style={{ color: 'var(--text-secondary)' }}>Loading…</p>
@@ -202,7 +203,7 @@ export default function CreditCardsPage() {
               }}
             >
               <span>
-                ${feesAtRisk.toLocaleString()} in annual fees coming due within 30 days.
+                {fmtMoney(feesAtRisk)} in annual fees coming due within 30 days.
               </span>
             </div>
           )}

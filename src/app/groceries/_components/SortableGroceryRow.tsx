@@ -33,7 +33,9 @@ export default function SortableGroceryRow({
     background: isDragging ? 'var(--surface-hover)' : 'transparent',
     borderRadius: isDragging ? 8 : 0,
     padding: '8px 0',
-    borderBottom: '1px solid var(--hairline)',
+    // border-bottom comes from the .checkbox-row class so its :last-child
+    // rule can remove the divider under the final row (inline style would win
+    // over the class and leave a stray line).
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',

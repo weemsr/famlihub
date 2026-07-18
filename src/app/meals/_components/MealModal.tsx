@@ -13,6 +13,7 @@ export default function MealModal({
   mealNote,
   recipes,
   loading,
+  saveError,
   onClose,
   onChangeDay,
   onSelectRecipe,
@@ -29,6 +30,7 @@ export default function MealModal({
   mealNote: string;
   recipes: RecipeItem[];
   loading: boolean;
+  saveError?: string | null;
   onClose: () => void;
   onChangeDay: (nextDay: string) => void;
   onSelectRecipe: (id: string) => void;
@@ -123,6 +125,12 @@ export default function MealModal({
             style={{ borderRadius: 16, height: 80, resize: 'none' }}
           />
         </div>
+
+        {saveError && (
+          <p className="text-sm" style={{ color: 'var(--danger-color)', marginBottom: 12 }}>
+            Couldn&apos;t save: {saveError}
+          </p>
+        )}
 
         <button
           className="btn"

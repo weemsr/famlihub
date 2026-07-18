@@ -26,8 +26,10 @@ export default function ItemCard({
           aria-hidden
           style={{
             width: 40, height: 40, borderRadius: 12,
-            background: 'rgba(30, 58, 138, 0.10)',
-            color: '#1E3A8A',
+            // Mid-blue reads on both light and dark surfaces (the old navy
+            // #1E3A8A tint was nearly invisible on the dark theme).
+            background: 'color-mix(in srgb, #3B82F6 14%, transparent)',
+            color: '#3B82F6',
             display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
             flexShrink: 0,
           }}

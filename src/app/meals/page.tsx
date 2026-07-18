@@ -43,6 +43,7 @@ export default function MealsPage() {
   const [customName, setCustomName] = useState('');
   const [mealNote, setMealNote] = useState('');
   const [loading, setLoading] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
@@ -163,14 +164,16 @@ export default function MealsPage() {
     setCustomName('');
     setMealNote('');
     setIsFabAdd(false);
+    setSaveError(null);
     setIsModalOpen(true);
   };
 
   const saveMeal = async () => {
     if (!selectedRecipeId && !customName.trim()) return;
     setLoading(true);
+    setSaveError(null);
     const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) { setLoading(false); return; }
+    if (!userData.user) { setLoading(false); setSaveError('Not signed in.'); return; }
 
     const newBody = {
       day: activeDay,
@@ -187,10 +190,16 @@ export default function MealsPage() {
       body: newBody,
       user_id: userData.user.id,
     });
-    if (error) console.error('Failed to save meal:', error.message);
+
+    setLoading(false);
+    if (error) {
+      // Keep the modal open so the user's input isn't lost and the failure
+      // is visible, instead of closing as if the save succeeded.
+      setSaveError(error.message || 'Failed to save meal.');
+      return;
+    }
 
     setIsModalOpen(false);
-    setLoading(false);
     loadData();
   };
 
@@ -265,7 +274,8 @@ export default function MealsPage() {
           mealNote={mealNote}
           recipes={recipes}
           loading={loading}
-          onClose={() => setIsModalOpen(false)}
+          saveError={saveError}
+          onClose={() => { setIsModalOpen(false); setSaveError(null); }}
           onChangeDay={next => {
             setActiveDay(next);
             setActiveDayLabel(dayLabelFor(next));

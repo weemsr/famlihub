@@ -5,7 +5,7 @@ import AuthProvider from '@/components/AuthProvider';
 
 export const metadata: Metadata = {
   title: 'FamLi Hub',
-  description: 'Shared notes, todos, recipes, and groceries.',
+  description: 'Family hub: groceries, meals, recipes, to-dos, notes, pantry, calendar, credit cards, and home upkeep.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,

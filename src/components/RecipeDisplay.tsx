@@ -85,7 +85,7 @@ export default function RecipeDisplay({
           aria-label="Scale ingredients"
           style={{
             display: 'inline-flex', gap: 4, padding: 4,
-            background: 'var(--background)', borderRadius: 999,
+            background: 'var(--surface-color)', borderRadius: 999,
             border: '1px solid var(--hairline)', alignSelf: 'flex-start',
           }}
         >
@@ -133,7 +133,7 @@ export default function RecipeDisplay({
               style={{
                 width: 80, padding: '6px 10px', fontSize: 14, fontWeight: 600,
                 border: '1px solid var(--hairline)', borderRadius: 8,
-                background: 'var(--background)', color: 'var(--text-primary)',
+                background: 'var(--surface-color)', color: 'var(--text-primary)',
               }}
             />
             {!originalServings && <span style={{ color: 'var(--text-secondary)' }}>×</span>}

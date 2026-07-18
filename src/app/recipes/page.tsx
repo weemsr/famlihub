@@ -12,7 +12,10 @@ import RecipeCard, { type RecipeItem } from './_components/RecipeCard';
 // Module-level cache: persists across client-side navigation so returning to
 // the Recipes tab renders the list instantly while we revalidate in the
 // background, instead of refetching from scratch and flashing a blank screen.
+// Keyed to the owning user id so a sign-out/sign-in as a different family
+// member can never show the previous account's recipes.
 let recipesCache: RecipeItem[] | null = null;
+let recipesCacheUserId: string | null = null;
 
 export default function RecipesPage() {
   const [url, setUrl] = useState('');
@@ -40,6 +43,15 @@ export default function RecipesPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) { setListLoading(false); return; }
 
+    // Cache belongs to a different account (user switched without a page
+    // reload): drop the seeded list immediately rather than showing the
+    // previous user's recipes while the fetch is in flight.
+    if (recipesCacheUserId && recipesCacheUserId !== userData.user.id) {
+      recipesCache = null;
+      setRecipes([]);
+      setListLoading(true);
+    }
+
     const { data } = await supabase.from('items')
       .select('*')
       .eq('type', 'recipe')
@@ -47,6 +59,7 @@ export default function RecipesPage() {
 
     if (data) {
       recipesCache = data as RecipeItem[];
+      recipesCacheUserId = userData.user.id;
       setRecipes(data as RecipeItem[]);
     }
     setListLoading(false);

@@ -6,6 +6,9 @@ export interface GoogleEvent {
   start: string;
   end: string;
   allDay: boolean;
+  /** Calendar date ("YYYY-MM-DD") for all-day events — group by this, not by
+   *  localizing `start` (midnight UTC shifts a day in western timezones). */
+  day?: string;
   location?: string;
   htmlLink?: string;
   calendarId: string;

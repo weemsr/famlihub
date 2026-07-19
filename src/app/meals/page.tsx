@@ -65,6 +65,10 @@ export default function MealsPage() {
     loadDataRef.current();
     const channel = supabase.channel('realtime:meals')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: 'type=eq.meal' }, () => loadDataRef.current())
+      // Recipe edits (rename, new image) must refresh the planner too — meal
+      // rows only reference recipes by id, so titles/thumbnails come from the
+      // recipes loaded here.
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: 'type=eq.recipe' }, () => loadDataRef.current())
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, []);

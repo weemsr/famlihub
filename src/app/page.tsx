@@ -2,7 +2,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
-import { CheckSquare, ShoppingCart, Utensils, PenTool, Package, Calendar as CalIcon, ExternalLink } from 'lucide-react';
+import { CheckSquare, ShoppingCart, Utensils, PenTool, Package, Calendar as CalIcon } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import ThemeToggle from '@/components/ThemeToggle';
 
@@ -12,8 +12,8 @@ interface GoogleEvent {
   start: string;
   end: string;
   allDay: boolean;
+  day?: string; // calendar date for all-day events (no timezone)
   location?: string;
-  htmlLink?: string;
 }
 
 function fmtTimeShort(iso: string): string {
@@ -33,19 +33,27 @@ export default function Home() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
-    const { data } = await supabase.from('items').select('type, is_completed');
-
-    if (data) {
-      const c = { todo: 0, grocery: 0, recipe: 0, note: 0, inventory: 0 };
-      data.forEach(item => {
-        if (item.type === 'todo' && !item.is_completed) c.todo++;
-        if (item.type === 'grocery' && !item.is_completed) c.grocery++;
-        if (item.type === 'recipe') c.recipe++;
-        if (item.type === 'note') c.note++;
-        if (item.type === 'inventory') c.inventory++;
-      });
-      setCounts(c);
-    }
+    // Head-only count queries: the dashboard needs numbers, not rows, so
+    // don't download the whole items table just to count it client-side.
+    const countOf = (type: string, pendingOnly = false) => {
+      let q = supabase.from('items').select('*', { count: 'exact', head: true }).eq('type', type);
+      if (pendingOnly) q = q.eq('is_completed', false);
+      return q;
+    };
+    const [todo, grocery, recipe, note, inventory] = await Promise.all([
+      countOf('todo', true),
+      countOf('grocery', true),
+      countOf('recipe'),
+      countOf('note'),
+      countOf('inventory'),
+    ]);
+    setCounts({
+      todo: todo.count ?? 0,
+      grocery: grocery.count ?? 0,
+      recipe: recipe.count ?? 0,
+      note: note.count ?? 0,
+      inventory: inventory.count ?? 0,
+    });
   }, []);
 
   const loadTodayEvents = useCallback(async () => {
@@ -73,7 +81,12 @@ export default function Home() {
       }
       setTodayError(null);
       setCalendarConnected(!!json.connected);
-      setTodayEvents(json.events || []);
+      // All-day events have no timezone; the server's overlap window can let
+      // tomorrow's all-day events leak in a day early. Keep only the ones
+      // whose calendar date is actually today (local).
+      const todayIso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+      const events = (json.events || []).filter(ev => !ev.allDay || !ev.day || ev.day === todayIso);
+      setTodayEvents(events);
     } catch (err) {
       setTodayError(err instanceof Error ? err.message : 'Failed to load calendar');
     }
@@ -176,16 +189,9 @@ export default function Home() {
                   {ev.allDay ? 'All day' : fmtTimeShort(ev.start)}
                 </span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  {ev.htmlLink ? (
-                    <a href={ev.htmlLink} target="_blank" rel="noopener noreferrer" style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ev.title || '(no title)'}</span>
-                      <ExternalLink size={11} style={{ opacity: 0.5, flexShrink: 0 }} />
-                    </a>
-                  ) : (
-                    <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
-                      {ev.title || '(no title)'}
-                    </span>
-                  )}
+                  <span style={{ fontSize: '0.92rem', fontWeight: 600, color: 'var(--text-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
+                    {ev.title || '(no title)'}
+                  </span>
                   {ev.location && (
                     <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {ev.location}

@@ -25,6 +25,10 @@ interface OutEvent {
   start: string; // ISO
   end: string;   // ISO
   allDay: boolean;
+  /** Calendar date ("YYYY-MM-DD") for all-day events. VALUE=DATE events have
+   *  no timezone, so clients must group/filter by this instead of localizing
+   *  the midnight-UTC `start` timestamp (which shifts a day in US timezones). */
+  day?: string;
   location?: string;
   description?: string;
   htmlLink?: string;
@@ -98,13 +102,19 @@ async function fetchIcs(url: string): Promise<{ ok: true; text: string } | { ok:
     if (!res.ok) return { ok: false, message: `HTTP ${res.status}` };
     const text = await res.text();
     icsCache.set(url, { text, expiresAt: now + ICS_TTL_MS });
-    // Bound memory: if the map grows past 500 entries (shared tenant, wide
-    // usage) drop the oldest half. Plenty of headroom for any realistic
-    // personal deployment.
+    // Bound memory: past 500 entries, first prune expired entries, then (if
+    // still over) drop oldest-inserted entries — Map iterates in insertion
+    // order — so the cache can never grow unbounded even when all entries
+    // are fresh.
     if (icsCache.size > 500) {
-      const cutoff = now;
       for (const [k, v] of icsCache) {
-        if (v.expiresAt <= cutoff) icsCache.delete(k);
+        if (v.expiresAt <= now) icsCache.delete(k);
+      }
+      if (icsCache.size > 500) {
+        for (const k of icsCache.keys()) {
+          if (icsCache.size <= 500) break;
+          icsCache.delete(k);
+        }
       }
     }
     return { ok: true, text };
@@ -162,6 +172,7 @@ function parseIcs(icsText: string, entry: GoogleCalendarEntry, startDate: Date, 
             start: occStart.toISOString(),
             end: occEnd.toISOString(),
             allDay,
+            ...(allDay ? { day: `${occ.year}-${String(occ.month).padStart(2, '0')}-${String(occ.day).padStart(2, '0')}` } : {}),
             location,
             description,
             calendarId: entry.id,
@@ -182,6 +193,7 @@ function parseIcs(icsText: string, entry: GoogleCalendarEntry, startDate: Date, 
           start: s.toISOString(),
           end: e.toISOString(),
           allDay,
+          ...(allDay ? { day: `${ev.startDate.year}-${String(ev.startDate.month).padStart(2, '0')}-${String(ev.startDate.day).padStart(2, '0')}` } : {}),
           location,
           description,
           calendarId: entry.id,

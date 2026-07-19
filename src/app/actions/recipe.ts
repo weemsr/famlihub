@@ -208,26 +208,77 @@ export async function fetchRecipeFromUrl(url: string) {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 15000);
 
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Cache-Control': 'no-cache'
-      },
-      cache: 'no-store',
-      redirect: 'follow',
-      signal: controller.signal
-    });
-    clearTimeout(timeout);
+    // Follow redirects manually so every hop is re-validated by isUrlSafe —
+    // with redirect:'follow' a hostile page could 302 to a private/metadata
+    // address after the initial URL passed the guard.
+    const FETCH_HEADERS = {
+      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+      'Accept-Language': 'en-US,en;q=0.9',
+      'Cache-Control': 'no-cache',
+    };
+    let currentUrl = url;
+    let res: Response | null = null;
+    for (let hop = 0; hop <= 3; hop++) {
+      const attempt = await fetch(currentUrl, {
+        headers: FETCH_HEADERS,
+        cache: 'no-store',
+        redirect: 'manual',
+        signal: controller.signal,
+      });
+      if (![301, 302, 303, 307, 308].includes(attempt.status)) {
+        res = attempt;
+        break;
+      }
+      const location = attempt.headers.get('location');
+      if (!location) throw new Error('The site sent a redirect with no destination.');
+      if (hop === 3) throw new Error('Too many redirects on this link.');
+      const nextUrl = new URL(location, currentUrl).toString();
+      if (!(await isUrlSafe(nextUrl))) {
+        throw new Error('This link redirects to a blocked address.');
+      }
+      currentUrl = nextUrl;
+    }
+    if (!res) throw new Error('Failed to load recipe page.');
 
     if (!res.ok) {
+      clearTimeout(timeout);
       throw new Error(
         `The site returned an error for this page (HTTP ${res.status}). ` +
         'The recipe may have moved — open the link in your browser to check it still works, then re-copy the URL.'
       );
     }
-    const html = await res.text();
+
+    const contentType = (res.headers.get('content-type') || '').toLowerCase();
+    if (contentType && !contentType.includes('text/html') && !contentType.includes('application/xhtml')) {
+      clearTimeout(timeout);
+      throw new Error("That link isn't a web page, so there's no recipe to read from it.");
+    }
+
+    // Cap the body read so a hostile/misconfigured site can't stream an
+    // arbitrarily large response into memory.
+    const MAX_BYTES = 5 * 1024 * 1024;
+    let html = '';
+    if (res.body) {
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let received = 0;
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        if (received > MAX_BYTES) {
+          controller.abort();
+          clearTimeout(timeout);
+          throw new Error('This page is too large to import (over 5 MB).');
+        }
+        html += decoder.decode(value, { stream: true });
+      }
+      html += decoder.decode();
+    } else {
+      html = await res.text();
+    }
+    clearTimeout(timeout);
     const $ = cheerio.load(html);
 
     // Scraper internals traverse deeply untyped JSON from arbitrary sites;

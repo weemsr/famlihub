@@ -89,8 +89,15 @@ export default function CalendarPage() {
     setGoogleFetching(true);
     setGoogleFetchError(null);
 
-    const start = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
-    const end = new Date(cursor.getFullYear(), cursor.getMonth() + 2, 0);
+    // Widen the window to always include [today, today+14d] so the Upcoming
+    // list stays populated even when the user navigates to another month
+    // (it's derived from this same fetch).
+    const cursorStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
+    const cursorEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 2, 0);
+    const upcomingEnd = new Date(today);
+    upcomingEnd.setDate(today.getDate() + 14);
+    const start = cursorStart < today ? cursorStart : today;
+    const end = cursorEnd > upcomingEnd ? cursorEnd : upcomingEnd;
 
     const { data: sess } = await supabase.auth.getSession();
     const jwt = sess.session?.access_token;
@@ -112,14 +119,14 @@ export default function CalendarPage() {
     } finally {
       setGoogleFetching(false);
     }
-  }, [entries, cursor]);
+  }, [entries, cursor, today]);
 
   useEffect(() => { fetchGoogleEvents(); }, [fetchGoogleEvents]);
 
   const eventsByDay = useMemo(() => {
     const m = new Map<string, GoogleEvent[]>();
     for (const ev of googleEvents) {
-      const key = isoDay(new Date(ev.start));
+      const key = ev.day ?? isoDay(new Date(ev.start));
       const list = m.get(key);
       if (list) list.push(ev); else m.set(key, [ev]);
     }

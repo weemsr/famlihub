@@ -43,6 +43,83 @@ function flattenInstructions(steps: HowToStep[]): string[] {
   return result;
 }
 
+// Sanity CMS recipe shapes (madewithlau). Used by both the legacy
+// __NEXT_DATA__ path and the App-Router RSC flight-payload path below.
+interface SanityIngredient {
+  _type?: string;
+  section?: string;
+  title?: string;
+  amount?: number | string;
+  unit?: string;
+  item?: string;
+  purpose?: string;
+}
+interface SanityInstruction { freeformDescription?: unknown; headline?: string }
+
+/**
+ * Format a Sanity ingredientsArray into display lines. Section headers become
+ * "Name:" lines so grouped lists (marinade vs. sauce) stay readable instead of
+ * collapsing into an unlabeled run of near-duplicate ingredients.
+ */
+function mapSanityIngredients(arr: unknown[]): string[] {
+  const out: string[] = [];
+  for (const raw of arr) {
+    const i = raw as SanityIngredient;
+    if (!i || typeof i !== 'object') continue;
+    if (i._type === 'ingredientSection') {
+      const label = (i.section || i.title || '').trim();
+      if (label) out.push(`${label}:`);
+      continue;
+    }
+    if (!i.item) continue;
+    const parts = [i.amount, i.unit, i.item].filter(Boolean);
+    if (i.purpose) parts.push(`(${i.purpose})`);
+    const line = parts.join(' ').trim();
+    if (line) out.push(line);
+  }
+  return out;
+}
+
+function mapSanityInstructions(arr: unknown[]): string[] {
+  return arr
+    .map(raw => {
+      const i = raw as SanityInstruction;
+      const desc = i?.freeformDescription ? extractSanityText(i.freeformDescription) : '';
+      return desc || i?.headline || '';
+    })
+    .filter(Boolean);
+}
+
+/**
+ * Extract a balanced JSON array value for `"key":[...]` out of a larger text
+ * blob, respecting strings and escapes. Used to mine recipe data out of the
+ * Next.js App Router RSC flight payload, which is not one parseable JSON doc.
+ */
+function extractJsonArray(source: string, key: string): unknown[] | null {
+  const start = source.indexOf(`"${key}":[`);
+  if (start < 0) return null;
+  const open = source.indexOf('[', start);
+  let depth = 0, inStr = false, esc = false;
+  for (let j = open; j < source.length; j++) {
+    const ch = source[j];
+    if (esc) { esc = false; continue; }
+    if (ch === '\\') { if (inStr) esc = true; continue; }
+    if (ch === '"') { inStr = !inStr; continue; }
+    if (inStr) continue;
+    if (ch === '[') depth++;
+    else if (ch === ']') {
+      depth--;
+      if (depth === 0) {
+        try {
+          const parsed = JSON.parse(source.slice(open, j + 1));
+          return Array.isArray(parsed) ? parsed : null;
+        } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
 function isPrivateIPv4(ip: string): boolean {
   const parts = ip.split('.').map(Number);
   if (parts.length !== 4 || parts.some(n => isNaN(n) || n < 0 || n > 255)) return true; // malformed → reject
@@ -144,7 +221,12 @@ export async function fetchRecipeFromUrl(url: string) {
     });
     clearTimeout(timeout);
 
-    if (!res.ok) throw new Error('Failed to load recipe page.');
+    if (!res.ok) {
+      throw new Error(
+        `The site returned an error for this page (HTTP ${res.status}). ` +
+        'The recipe may have moved — open the link in your browser to check it still works, then re-copy the URL.'
+      );
+    }
     const html = await res.text();
     const $ = cheerio.load(html);
 
@@ -172,23 +254,8 @@ export async function fetchRecipeFromUrl(url: string) {
            if (!obj || typeof obj !== 'object') return;
            if (obj.ingredientsArray && obj.instructionsArray) {
               servings = servings ?? parseRecipeYield(obj.servings ?? obj.yields ?? obj.yield);
-              // Handle ingredient sections (madewithlau format: mix of section headers and ingredients)
-              ingredients = obj.ingredientsArray
-                .filter((i: any) => i._type !== 'ingredientSection' && i.item)
-                .map((i: any) => {
-                  const parts = [i.amount, i.unit, i.item].filter(Boolean);
-                  if (i.purpose) parts.push(`(${i.purpose})`);
-                  return parts.join(' ').trim();
-                })
-                .filter(Boolean);
-
-              // Extract instructions from Sanity portable text blocks
-              instructions = obj.instructionsArray.map((i: any) => {
-                 const desc = i.freeformDescription ? extractSanityText(i.freeformDescription) : '';
-                 if (desc) return desc;
-                 if (i.headline) return i.headline;
-                 return "";
-              }).filter(Boolean);
+              ingredients = mapSanityIngredients(obj.ingredientsArray);
+              instructions = mapSanityInstructions(obj.instructionsArray);
 
               titleRaw = obj.englishTitle || obj.title || titleRaw;
               title = titleRaw.split(' - ')[0].split(' | ')[0].trim();
@@ -218,6 +285,44 @@ export async function fetchRecipeFromUrl(url: string) {
       } catch(e) {}
     }
 
+    // 0.5 Next.js App Router RSC flight payload (madewithlau after their
+    // app-router migration removed __NEXT_DATA__). The Sanity recipe object is
+    // still embedded in self.__next_f.push chunks; reassemble them and mine
+    // ingredientsArray/instructionsArray out. Preferred over JSON-LD for these
+    // sites because it carries the clean englishTitle and section labels.
+    if (ingredients.length === 0) {
+      const flightChunks: string[] = [];
+      $('script').each((_, el) => {
+        const t = $(el).html() || '';
+        const rx = /self\.__next_f\.push\(\[1,"((?:[^"\\]|\\.)*)"\]\)/g;
+        let fm: RegExpExecArray | null;
+        while ((fm = rx.exec(t))) {
+          try { flightChunks.push(JSON.parse(`"${fm[1]}"`)); } catch {}
+        }
+      });
+      if (flightChunks.length > 0) {
+        const flight = flightChunks.join('');
+        const ingArr = extractJsonArray(flight, 'ingredientsArray');
+        if (ingArr && ingArr.length > 0) {
+          const mapped = mapSanityIngredients(ingArr);
+          if (mapped.length > 0) {
+            ingredients = mapped;
+            const instArr = extractJsonArray(flight, 'instructionsArray');
+            if (instArr) instructions = mapSanityInstructions(instArr);
+            const tm = flight.match(/"englishTitle":"((?:[^"\\]|\\.)*)"/);
+            if (tm) {
+              try {
+                titleRaw = JSON.parse(`"${tm[1]}"`);
+                title = titleRaw.split(' - ')[0].split(' | ')[0].trim();
+              } catch {}
+            }
+            const sv = flight.match(/"servings":(\d+)/);
+            if (sv) servings = servings ?? parseInt(sv[1], 10);
+          }
+        }
+      }
+    }
+
     // 1. Try standard JSON-LD Schema.org parsing
     $('script[type="application/ld+json"]').each((_, el) => {
       try {
@@ -234,10 +339,14 @@ export async function fetchRecipeFromUrl(url: string) {
       } catch (e) {}
     });
 
-    // Only override from JSON-LD if we didn't already get data from __NEXT_DATA__
+    // Only take the JSON-LD title when no earlier path (NEXT_DATA / RSC)
+    // already extracted the recipe — those carry cleaner titles (englishTitle)
+    // that the JSON-LD marketing name would otherwise clobber.
     if (recipeData) {
-      titleRaw = recipeData.name || titleRaw;
-      title = titleRaw.split(' - ')[0].split(' | ')[0].trim();
+      if (ingredients.length === 0) {
+        titleRaw = recipeData.name || titleRaw;
+        title = titleRaw.split(' - ')[0].split(' | ')[0].trim();
+      }
       servings = servings ?? parseRecipeYield(recipeData.recipeYield ?? recipeData.yield);
     }
 

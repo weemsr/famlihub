@@ -162,7 +162,7 @@ export default function RecipeCard({
               />
             </>
           ) : (
-            <RecipeDisplay recipe={recipe} showAddToGrocery />
+            <RecipeDisplay key={recipe.id} recipe={recipe} showAddToGrocery />
           )}
         </div>
       )}

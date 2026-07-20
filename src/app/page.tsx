@@ -29,67 +29,94 @@ export default function Home() {
   const [calendarConnected, setCalendarConnected] = useState<boolean | null>(null);
   const [todayError, setTodayError] = useState<string | null>(null);
 
-  const loadCounts = useCallback(async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
+  // Fetch is separated from state application so the mount effect applies
+  // data in a .then callback (react-hooks/set-state-in-effect compliant).
+  const loadCounts = useCallback(() => {
+    const run = async () => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return null;
 
-    // Head-only count queries: the dashboard needs numbers, not rows, so
-    // don't download the whole items table just to count it client-side.
-    const countOf = (type: string, pendingOnly = false) => {
-      let q = supabase.from('items').select('*', { count: 'exact', head: true }).eq('type', type);
-      if (pendingOnly) q = q.eq('is_completed', false);
-      return q;
+      // Head-only count queries: the dashboard needs numbers, not rows, so
+      // don't download the whole items table just to count it client-side.
+      const countOf = (type: string, pendingOnly = false) => {
+        let q = supabase.from('items').select('*', { count: 'exact', head: true }).eq('type', type);
+        if (pendingOnly) q = q.eq('is_completed', false);
+        return q;
+      };
+      const [todo, grocery, recipe, note, inventory] = await Promise.all([
+        countOf('todo', true),
+        countOf('grocery', true),
+        countOf('recipe'),
+        countOf('note'),
+        countOf('inventory'),
+      ]);
+      return {
+        todo: todo.count ?? 0,
+        grocery: grocery.count ?? 0,
+        recipe: recipe.count ?? 0,
+        note: note.count ?? 0,
+        inventory: inventory.count ?? 0,
+      };
     };
-    const [todo, grocery, recipe, note, inventory] = await Promise.all([
-      countOf('todo', true),
-      countOf('grocery', true),
-      countOf('recipe'),
-      countOf('note'),
-      countOf('inventory'),
-    ]);
-    setCounts({
-      todo: todo.count ?? 0,
-      grocery: grocery.count ?? 0,
-      recipe: recipe.count ?? 0,
-      note: note.count ?? 0,
-      inventory: inventory.count ?? 0,
-    });
+    run().then(c => { if (c) setCounts(c); });
   }, []);
 
-  const loadTodayEvents = useCallback(async () => {
-    const { data: sess } = await supabase.auth.getSession();
-    const jwt = sess.session?.access_token;
-    if (!jwt) return;
+  // Fetch is separated from state application (applied in a .then callback)
+  // for react-hooks/set-state-in-effect compliance.
+  const loadTodayEvents = useCallback(() => {
+    type Result =
+      | { kind: 'skip' }
+      | { kind: 'httpError'; message: string }
+      | { kind: 'fetchError'; message: string }
+      | { kind: 'ok'; connected: boolean; events: GoogleEvent[] };
 
-    // Local-day window: midnight today → midnight tomorrow.
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-    const end = new Date(start);
-    end.setDate(start.getDate() + 1);
+    const run = async (): Promise<Result> => {
+      const { data: sess } = await supabase.auth.getSession();
+      const jwt = sess.session?.access_token;
+      if (!jwt) return { kind: 'skip' };
 
-    try {
-      const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
-      const res = await fetch(`/api/google-calendar/events?${qs.toString()}`, {
-        headers: { Authorization: `Bearer ${jwt}` },
-      });
-      const json = (await res.json()) as { events?: GoogleEvent[]; connected?: boolean; error?: string };
-      if (!res.ok) {
-        setTodayError(json.error || `Request failed (${res.status})`);
+      // Local-day window: midnight today → midnight tomorrow.
+      const now = new Date();
+      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+      const end = new Date(start);
+      end.setDate(start.getDate() + 1);
+
+      try {
+        const qs = new URLSearchParams({ start: start.toISOString(), end: end.toISOString() });
+        const res = await fetch(`/api/google-calendar/events?${qs.toString()}`, {
+          headers: { Authorization: `Bearer ${jwt}` },
+        });
+        const json = (await res.json()) as { events?: GoogleEvent[]; connected?: boolean; error?: string };
+        if (!res.ok) {
+          return { kind: 'httpError', message: json.error || `Request failed (${res.status})` };
+        }
+        // All-day events have no timezone; the server's overlap window can let
+        // tomorrow's all-day events leak in a day early. Keep only the ones
+        // whose calendar date is actually today (local).
+        const todayIso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
+        const events = (json.events || []).filter(ev => !ev.allDay || !ev.day || ev.day === todayIso);
+        return { kind: 'ok', connected: !!json.connected, events };
+      } catch (err) {
+        return { kind: 'fetchError', message: err instanceof Error ? err.message : 'Failed to load calendar' };
+      }
+    };
+
+    run().then(r => {
+      if (r.kind === 'skip') return;
+      if (r.kind === 'httpError') {
+        setTodayError(r.message);
         setCalendarConnected(null);
         setTodayEvents(null);
         return;
       }
+      if (r.kind === 'fetchError') {
+        setTodayError(r.message);
+        return;
+      }
       setTodayError(null);
-      setCalendarConnected(!!json.connected);
-      // All-day events have no timezone; the server's overlap window can let
-      // tomorrow's all-day events leak in a day early. Keep only the ones
-      // whose calendar date is actually today (local).
-      const todayIso = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, '0')}-${String(start.getDate()).padStart(2, '0')}`;
-      const events = (json.events || []).filter(ev => !ev.allDay || !ev.day || ev.day === todayIso);
-      setTodayEvents(events);
-    } catch (err) {
-      setTodayError(err instanceof Error ? err.message : 'Failed to load calendar');
-    }
+      setCalendarConnected(r.connected);
+      setTodayEvents(r.events);
+    });
   }, []);
 
   useEffect(() => {

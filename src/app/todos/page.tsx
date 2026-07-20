@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, Edit2, FolderPlus, CheckSquare } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import type { TodoBody } from '@/lib/types';
@@ -63,10 +63,16 @@ export default function TodosPage() {
     if (error) setItems(prevItems);
   };
 
-  const loadItems = async () => {
-    const { data } = await supabase.from('items').select('*').eq('type', 'todo').order('created_at', { ascending: false });
-    if (data) setItems(data);
-  };
+  // Fetch is separated from state application (applied in a .then callback)
+  // for react-hooks/set-state-in-effect compliance; memoized so the mount
+  // effect's dependency is stable.
+  const loadItems = useCallback(() => {
+    const fetchItems = async (): Promise<TodoItem[] | null> => {
+      const { data } = await supabase.from('items').select('*').eq('type', 'todo').order('created_at', { ascending: false });
+      return data ?? null;
+    };
+    fetchItems().then(d => { if (d) setItems(d); });
+  }, []);
 
   useEffect(() => {
     loadItems();
@@ -76,7 +82,7 @@ export default function TodosPage() {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [loadItems]);
 
   const addItem = async () => {
     if (!input.trim()) return;

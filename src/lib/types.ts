@@ -112,6 +112,13 @@ export type MaintenanceItem = Item<MaintenanceBody> & { title: string };
 export type CreditCardItem = Item<CreditCardBody> & { title: string };
 
 /**
+ * Sort stamp for a newly added grocery row. Epoch ms sits on the same number
+ * line as the created_at fallback in the groceries sort, so a fresh item
+ * always lands at the bottom of its list.
+ */
+export const groceryOrderStamp = () => Date.now();
+
+/**
  * Coerce an unknown value to a string[]. Handles the common scraped shapes:
  * array of strings, single string, or anything else → [].
  */

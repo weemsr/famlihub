@@ -124,7 +124,7 @@ export default function MealRecipeViewer({
           </a>
         )}
 
-        <RecipeDisplay recipe={recipe} showAddToGrocery />
+        <RecipeDisplay key={recipe.id} recipe={recipe} showAddToGrocery />
       </div>
     </div>
   );

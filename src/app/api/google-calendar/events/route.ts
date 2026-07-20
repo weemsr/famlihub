@@ -160,7 +160,6 @@ function parseIcs(icsText: string, entry: GoogleCalendarEntry, startDate: Date, 
         const iterator = ev.iterator();
         let occ: ICAL.Time | null;
         let safety = 5000;
-        // eslint-disable-next-line no-cond-assign
         while ((occ = iterator.next()) && safety-- > 0) {
           if (occ.compare(windowEnd) > 0) break;
           if (occ.compare(windowStart) < 0) continue;

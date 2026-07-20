@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, PackageOpen } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LIMITS, capLen } from '@/lib/limits';
@@ -14,12 +14,18 @@ export default function InventoryPage() {
   const [items, setItems] = useState<InventoryItem[]>([]);
   const [input, setInput] = useState('');
 
-  const loadItems = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
-    const { data } = await supabase.from('items').select('*').eq('type', 'inventory').order('created_at', { ascending: false });
-    if (data) setItems(data as unknown as InventoryItem[]);
-  };
+  // Fetch is separated from state application (applied in a .then callback)
+  // for react-hooks/set-state-in-effect compliance; memoized so the mount
+  // effect's dependency is stable.
+  const loadItems = useCallback(() => {
+    const fetchItems = async (): Promise<InventoryItem[] | null> => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return null;
+      const { data } = await supabase.from('items').select('*').eq('type', 'inventory').order('created_at', { ascending: false });
+      return (data as unknown as InventoryItem[]) ?? null;
+    };
+    fetchItems().then(d => { if (d) setItems(d); });
+  }, []);
 
   useEffect(() => {
     loadItems();
@@ -28,7 +34,7 @@ export default function InventoryPage() {
         loadItems();
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [loadItems]);
 
   const addItem = async () => {
     if (!input.trim()) return;

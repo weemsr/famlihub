@@ -3,6 +3,7 @@ import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { scaleIngredient } from '@/lib/recipe-scale';
 import { LIMITS, capLen } from '@/lib/limits';
+import { groceryOrderStamp } from '@/lib/types';
 
 type AddState = 'idle' | 'adding' | 'success' | 'error';
 
@@ -34,9 +35,7 @@ export default function IngredientRow({ ing, scaleFactor = 1, showAddToGrocery =
     const { error } = await supabase.from('items').insert({
       type: 'grocery',
       title: capLen(displayText, LIMITS.title),
-      // `order` lands the item at the bottom and keeps it consistent with the
-      // grocery list's drag-reorder sort (which orders by body.order).
-      body: { store, order: Date.now() },
+      body: { store, order: groceryOrderStamp() },
       user_id: userData.user.id,
     });
 

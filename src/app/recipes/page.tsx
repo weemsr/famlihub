@@ -39,30 +39,34 @@ export default function RecipesPage() {
   const [manualIngredients, setManualIngredients] = useState('');
   const [manualInstructions, setManualInstructions] = useState('');
 
-  const loadRecipes = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) { setListLoading(false); return; }
+  // Fetch is separated from state application so the mount effect applies
+  // data in .then callbacks (react-hooks/set-state-in-effect compliant).
+  const loadRecipes = () => {
+    supabase.auth.getUser().then(({ data: userData }) => {
+      if (!userData.user) { setListLoading(false); return; }
 
-    // Cache belongs to a different account (user switched without a page
-    // reload): drop the seeded list immediately rather than showing the
-    // previous user's recipes while the fetch is in flight.
-    if (recipesCacheUserId && recipesCacheUserId !== userData.user.id) {
-      recipesCache = null;
-      setRecipes([]);
-      setListLoading(true);
-    }
+      // Cache belongs to a different account (user switched without a page
+      // reload): drop the seeded list immediately rather than showing the
+      // previous user's recipes while the fetch is in flight.
+      if (recipesCacheUserId && recipesCacheUserId !== userData.user.id) {
+        recipesCache = null;
+        setRecipes([]);
+        setListLoading(true);
+      }
 
-    const { data } = await supabase.from('items')
-      .select('*')
-      .eq('type', 'recipe')
-      .order('created_at', { ascending: false });
-
-    if (data) {
-      recipesCache = data as RecipeItem[];
-      recipesCacheUserId = userData.user.id;
-      setRecipes(data as RecipeItem[]);
-    }
-    setListLoading(false);
+      supabase.from('items')
+        .select('*')
+        .eq('type', 'recipe')
+        .order('created_at', { ascending: false })
+        .then(({ data }) => {
+          if (data) {
+            recipesCache = data as RecipeItem[];
+            recipesCacheUserId = userData.user.id;
+            setRecipes(data as RecipeItem[]);
+          }
+          setListLoading(false);
+        });
+    });
   };
 
   useEffect(() => { loadRecipes(); }, []);

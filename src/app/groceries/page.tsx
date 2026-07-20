@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useCallback } from 'react';
 import { Plus, ShoppingBag } from 'lucide-react';
 import {
   DndContext, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
@@ -9,7 +9,7 @@ import {
   SortableContext, sortableKeyboardCoordinates, verticalListSortingStrategy, arrayMove,
 } from '@dnd-kit/sortable';
 import { supabase } from '@/lib/supabase';
-import type { GroceryBody, GroceryStore } from '@/lib/types';
+import { groceryOrderStamp, type GroceryBody, type GroceryStore } from '@/lib/types';
 import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 import SortableGroceryRow from './_components/SortableGroceryRow';
@@ -69,16 +69,22 @@ export default function GroceriesPage() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  const loadItems = async () => {
-    const { data: userData } = await supabase.auth.getUser();
-    if (!userData.user) return;
+  // Fetch is separated from state application (applied in a .then callback)
+  // for react-hooks/set-state-in-effect compliance; memoized so the mount
+  // effect's dependency is stable.
+  const loadItems = useCallback(() => {
+    const fetchItems = async (): Promise<GroceryItem[] | null> => {
+      const { data: userData } = await supabase.auth.getUser();
+      if (!userData.user) return null;
 
-    const { data } = await supabase.from('items')
-      .select('*')
-      .eq('type', 'grocery');
+      const { data } = await supabase.from('items')
+        .select('*')
+        .eq('type', 'grocery');
 
-    if (data) setItems(data as unknown as GroceryItem[]);
-  };
+      return (data as unknown as GroceryItem[]) ?? null;
+    };
+    fetchItems().then(d => { if (d) setItems(d); });
+  }, []);
 
   useEffect(() => {
     loadItems();
@@ -88,7 +94,7 @@ export default function GroceriesPage() {
       })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
-  }, []);
+  }, [loadItems]);
 
   // Pre-sorted, per-store lists. Memoized so drag operations don't re-sort
   // every keystroke in the inputs.
@@ -112,10 +118,7 @@ export default function GroceriesPage() {
     const { data: userData } = await supabase.auth.getUser();
     if (!userData.user) return;
 
-    // Date.now() is on the same scale as `effectiveOrder`'s created_at
-    // fallback, so a new item always sorts to the true bottom of its list —
-    // including past legacy items that never got an `order` field set.
-    const body: GroceryBody = { store, order: Date.now() };
+    const body: GroceryBody = { store, order: groceryOrderStamp() };
 
     const prevRegular = regularInput, prevCostco = costcoInput, prevAsian = asianInput;
     if (store === 'regular') setRegularInput('');

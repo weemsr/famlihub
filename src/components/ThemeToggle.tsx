@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useSyncExternalStore } from 'react';
 import { Sun, Moon } from 'lucide-react';
 
 type Theme = 'light' | 'dark';
 
 const STORAGE_KEY = 'famli.theme';
+const CHANGE_EVENT = 'famli-theme-change';
 
 function apply(theme: Theme) {
   if (typeof document === 'undefined') return;
@@ -12,39 +13,48 @@ function apply(theme: Theme) {
 }
 
 function read(): Theme | null {
-  if (typeof window === 'undefined') return null;
   const v = window.localStorage.getItem(STORAGE_KEY);
   if (v === 'light' || v === 'dark') return v;
   return null;
 }
 
-function resolveInitial(): Theme {
+/**
+ * Theme as an external store: localStorage override first, then the system
+ * preference. useSyncExternalStore keeps hydration safe — the server snapshot
+ * is 'light' and the client corrects right after hydration, matching the
+ * no-flash bootstrap script in layout.tsx that already set data-theme
+ * pre-paint (so there is still no visible flash).
+ */
+function getSnapshot(): Theme {
   const stored = read();
   if (stored) return stored;
-  if (typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-    return 'dark';
-  }
+  return window.matchMedia?.('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
+function getServerSnapshot(): Theme {
   return 'light';
 }
 
-export default function ThemeToggle() {
-  const [theme, setTheme] = useState<Theme>('light');
+function subscribe(onChange: () => void) {
+  window.addEventListener(CHANGE_EVENT, onChange);
+  window.addEventListener('storage', onChange); // cross-tab sync
+  return () => {
+    window.removeEventListener(CHANGE_EVENT, onChange);
+    window.removeEventListener('storage', onChange);
+  };
+}
 
-  // Initialize after hydration to match the no-flash bootstrap script.
-  useEffect(() => {
-    const next = resolveInitial();
-    setTheme(next);
-    apply(next);
-  }, []);
+export default function ThemeToggle() {
+  const theme = useSyncExternalStore(subscribe, getSnapshot, getServerSnapshot);
 
   const choose = (next: Theme) => {
-    setTheme(next);
     try {
       window.localStorage.setItem(STORAGE_KEY, next);
     } catch {
       // Private mode / quota; theme still applies for this session.
     }
     apply(next);
+    window.dispatchEvent(new Event(CHANGE_EVENT));
   };
 
   const options: Array<{ id: Theme; icon: typeof Sun; label: string }> = [

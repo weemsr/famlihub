@@ -300,32 +300,39 @@ export async function fetchRecipeFromUrl(url: string) {
       try {
         const nextData = JSON.parse(nextDataStr);
         let found = false;
-        const searchDeep = (obj: any) => {
+        const searchDeep = (raw: unknown) => {
            if (found) return;
-           if (!obj || typeof obj !== 'object') return;
-           if (obj.ingredientsArray && obj.instructionsArray) {
+           if (!raw || typeof raw !== 'object') return;
+           const obj = raw as Record<string, unknown>;
+           if (Array.isArray(obj.ingredientsArray) && Array.isArray(obj.instructionsArray)) {
               servings = servings ?? parseRecipeYield(obj.servings ?? obj.yields ?? obj.yield);
               ingredients = mapSanityIngredients(obj.ingredientsArray);
               instructions = mapSanityInstructions(obj.instructionsArray);
 
-              titleRaw = obj.englishTitle || obj.title || titleRaw;
+              if (typeof obj.englishTitle === 'string' && obj.englishTitle) titleRaw = obj.englishTitle;
+              else if (typeof obj.title === 'string' && obj.title) titleRaw = obj.title;
               title = titleRaw.split(' - ')[0].split(' | ')[0].trim();
-              if (obj.mainImage1x1?.asset?.url) image = obj.mainImage1x1.asset.url;
-              else if (obj.mainImage?.asset?.url) image = obj.mainImage.asset.url;
+              const img1x1 = (obj.mainImage1x1 as { asset?: { url?: string } } | undefined)?.asset?.url;
+              const imgMain = (obj.mainImage as { asset?: { url?: string } } | undefined)?.asset?.url;
+              if (img1x1) image = img1x1;
+              else if (imgMain) image = imgMain;
               found = true;
               return;
            }
            // Also look for recipeIngredient / recipeInstructions in NEXT_DATA (some sites embed JSON-LD-like data)
-           if (obj.recipeIngredient && Array.isArray(obj.recipeIngredient) && obj.recipeIngredient.length > 0) {
+           if (Array.isArray(obj.recipeIngredient) && obj.recipeIngredient.length > 0) {
               servings = servings ?? parseRecipeYield(obj.recipeYield ?? obj.yield);
-              ingredients = obj.recipeIngredient;
+              ingredients = obj.recipeIngredient.filter((x): x is string => typeof x === 'string');
               if (Array.isArray(obj.recipeInstructions)) {
-                instructions = flattenInstructions(obj.recipeInstructions);
+                instructions = flattenInstructions(obj.recipeInstructions as HowToStep[]);
               }
-              titleRaw = obj.name || obj.title || titleRaw;
+              if (typeof obj.name === 'string' && obj.name) titleRaw = obj.name;
+              else if (typeof obj.title === 'string' && obj.title) titleRaw = obj.title;
               title = titleRaw.split(' - ')[0].split(' | ')[0].trim();
               if (obj.image) {
-                image = typeof obj.image === 'string' ? obj.image : (Array.isArray(obj.image) ? obj.image[0] : obj.image?.url || '');
+                if (typeof obj.image === 'string') image = obj.image;
+                else if (Array.isArray(obj.image) && typeof obj.image[0] === 'string') image = obj.image[0];
+                else if (typeof (obj.image as { url?: unknown }).url === 'string') image = (obj.image as { url: string }).url;
               }
               found = true;
               return;
@@ -333,7 +340,7 @@ export async function fetchRecipeFromUrl(url: string) {
            Object.values(obj).forEach(searchDeep);
         };
         searchDeep(nextData);
-      } catch(e) {}
+      } catch {}
     }
 
     // 0.5 Next.js App Router RSC flight payload (madewithlau after their
@@ -387,7 +394,7 @@ export async function fetchRecipeFromUrl(url: string) {
             recipeData = item; break;
           }
         }
-      } catch (e) {}
+      } catch {}
     });
 
     // Only take the JSON-LD title when no earlier path (NEXT_DATA / RSC)
@@ -430,16 +437,18 @@ export async function fetchRecipeFromUrl(url: string) {
     if (ingredients.length === 0) {
       const ingMatch = html.match(/"recipeIngredient"\s*:\s*\[([\s\S]*?)\]/i);
       if (ingMatch) {
-         try { ingredients = JSON.parse(`[${ingMatch[1]}]`); } catch(e) {}
+         try { ingredients = JSON.parse(`[${ingMatch[1]}]`); } catch {}
       }
     }
     if (instructions.length === 0) {
       const instMatch = html.match(/"recipeInstructions"\s*:\s*\[([\s\S]*?)\]/i);
       if (instMatch) {
          try {
-           const parsed = JSON.parse(`[${instMatch[1]}]`);
-           instructions = parsed.map((p: any) => p.text || p).filter(Boolean);
-         } catch(e) {}
+           const parsed = JSON.parse(`[${instMatch[1]}]`) as Array<string | { text?: string }>;
+           instructions = parsed
+             .map(p => (typeof p === 'string' ? p : p?.text || ''))
+             .filter(Boolean);
+         } catch {}
       }
     }
 

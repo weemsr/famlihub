@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { asStringArray, type RecipeBody } from '@/lib/types';
 import IngredientRow from '@/app/recipes/_components/IngredientRow';
 
@@ -28,14 +28,12 @@ export default function RecipeDisplay({
   const body: RecipeBody = recipe.body || {};
   const originalServings = typeof body.servings === 'number' && body.servings > 0 ? body.servings : undefined;
 
+  // Scale state resets between recipes via key={recipe.id} at the render
+  // sites (RecipeCard, MealRecipeViewer) — React remounts with fresh state,
+  // which replaces the previous reset-in-effect pattern.
   type ScaleMode = '1' | '1.5' | '2' | 'custom';
   const [scaleMode, setScaleMode] = useState<ScaleMode>('1');
   const [customValue, setCustomValue] = useState<string>(originalServings ? String(originalServings) : '1');
-
-  useEffect(() => {
-    setScaleMode('1');
-    setCustomValue(originalServings ? String(originalServings) : '1');
-  }, [originalServings, recipe.id]);
 
   let scaleFactor = 1;
   if (scaleMode === 'custom') {

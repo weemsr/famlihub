@@ -1,12 +1,13 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, PackageOpen, ListPlus } from 'lucide-react';
+import { Plus, PackageOpen, ListPlus, Camera } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LIMITS, capLen } from '@/lib/limits';
 import type { InventoryBody, InventoryItem, PantryLocation } from '@/lib/types';
 import PageHeader from '@/components/PageHeader';
 import { useUndoDelete } from '@/components/UndoSnackbar';
 import BulkAddSheet from './_components/BulkAddSheet';
+import ScanSheet, { type ScanDraft } from './_components/ScanSheet';
 import ItemRow from './_components/ItemRow';
 import { LOCATIONS } from './_components/constants';
 
@@ -20,6 +21,8 @@ export default function InventoryPage() {
   // Where single adds go, and the default for the bulk sheet. Sticky so
   // capturing a whole shelf doesn't mean re-picking the location every item.
   const [activeLocation, setActiveLocation] = useState<PantryLocation>('pantry');
+  const [scanOpen, setScanOpen] = useState(false);
+  const [providers, setProviders] = useState<{ id: string; label: string }[]>([]);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
@@ -47,6 +50,21 @@ export default function InventoryPage() {
       }).subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadItems]);
+
+  // Which vision providers are configured server-side. Empty => the scan
+  // entry point stays hidden and manual capture is the only path.
+  useEffect(() => {
+    const run = async () => {
+      const { data: sess } = await supabase.auth.getSession();
+      const jwt = sess.session?.access_token;
+      if (!jwt) return null;
+      const res = await fetch('/api/pantry-scan', { headers: { Authorization: `Bearer ${jwt}` } });
+      if (!res.ok) return null;
+      const json = await res.json() as { providers?: { id: string; label: string }[] };
+      return json.providers ?? [];
+    };
+    run().then(p => { if (p) setProviders(p); }).catch(() => {});
+  }, []);
 
   const counts = useMemo(() => {
     const c: Record<LocationFilter, number> = { all: items.length, pantry: 0, fridge: 0, freezer: 0, unsorted: 0 };
@@ -113,6 +131,30 @@ export default function InventoryPage() {
     }
   };
 
+  const importScanned = async (drafts: ScanDraft[], location: PantryLocation) => {
+    if (drafts.length === 0) return;
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) throw new Error('Not signed in');
+
+    const rows = drafts.map(d => {
+      const body: InventoryBody = { location };
+      const qty = d.quantity.trim();
+      if (qty) body.quantity = capLen(qty, LIMITS.title);
+      if (d.level) body.level = d.level;
+      return {
+        type: 'inventory',
+        title: capLen(d.name.trim(), LIMITS.title),
+        body,
+        user_id: userData.user!.id,
+      };
+    }).filter(r => r.title);
+
+    const { data, error } = await supabase.from('items').insert(rows).select();
+    if (error) throw error;
+    if (data) setItems(prev => [...(data as unknown as InventoryItem[]).reverse(), ...prev]);
+    setActiveLocation(location);
+  };
+
   /** Patch one item's body optimistically, reverting the row on failure. */
   const patchBody = async (id: string, patch: Partial<InventoryBody>) => {
     const item = items.find(i => i.id === id);
@@ -153,14 +195,26 @@ export default function InventoryPage() {
         color="#2D6A4F"
         title="Kitchen Inventory"
         right={
-          <button
-            type="button"
-            className="btn btn-secondary"
-            onClick={() => { setBulkError(null); setBulkOpen(true); }}
-            style={{ padding: '8px 14px', width: 'auto', borderRadius: 999, touchAction: 'manipulation' }}
-          >
-            <ListPlus size={16} /> Add many
-          </button>
+          <div style={{ display: 'flex', gap: 6 }}>
+            {providers.length > 0 && (
+              <button
+                type="button"
+                className="btn"
+                onClick={() => setScanOpen(true)}
+                style={{ padding: '8px 14px', width: 'auto', borderRadius: 999, touchAction: 'manipulation' }}
+              >
+                <Camera size={16} /> Scan
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => { setBulkError(null); setBulkOpen(true); }}
+              style={{ padding: '8px 14px', width: 'auto', borderRadius: 999, touchAction: 'manipulation' }}
+            >
+              <ListPlus size={16} /> Add many
+            </button>
+          </div>
         }
       />
       {snackbar}
@@ -244,7 +298,9 @@ export default function InventoryPage() {
         )}
         {loaded && items.length === 0 && (
           <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>
-            Pantry is empty. Tap <strong>Add many</strong> to capture a whole shelf at once.
+            Pantry is empty. {providers.length > 0
+              ? <>Tap <strong>Scan</strong> to photograph a shelf and build your list automatically.</>
+              : <>Tap <strong>Add many</strong> to capture a whole shelf at once.</>}
           </p>
         )}
         {loaded && items.length > 0 && visibleItems.length === 0 && (
@@ -262,6 +318,15 @@ export default function InventoryPage() {
           />
         ))}
       </div>
+
+      {scanOpen && providers.length > 0 && (
+        <ScanSheet
+          providers={providers}
+          defaultLocation={activeLocation}
+          onImport={importScanned}
+          onClose={() => setScanOpen(false)}
+        />
+      )}
 
       {bulkOpen && (
         <BulkAddSheet

@@ -314,6 +314,11 @@ textarea.input {
   to   { transform: translateY(0); }
 }
 
+/* Inline spinner for in-progress buttons (e.g. shelf scanning). */
+.spin { animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+
 /* Skeleton placeholder — shown while list data loads so the screen never
    looks blank. Gently pulses between full and reduced opacity. */
 .skeleton {

@@ -49,6 +49,22 @@ export interface MaintenanceBody {
 }
 
 /**
+ * Pantry / fridge / freezer stock item (Pantry tab). Stored in `items` with
+ * type='inventory'. Every field is optional: legacy rows predate this shape and
+ * must keep rendering. `quantity` is deliberately free text ("2 bags", "half a
+ * box") because real pantries don't have tidy units; `level` covers uncountables
+ * like spices and oils.
+ */
+export type PantryLocation = 'pantry' | 'fridge' | 'freezer';
+export type PantryLevel = 'low' | 'medium' | 'high';
+
+export interface InventoryBody {
+  quantity?: string;
+  location?: PantryLocation;
+  level?: PantryLevel;
+}
+
+/**
  * Credit card the user wants to keep an eye on for annual-fee renewal.
  * `cancelBy` is the deadline to decide whether to cancel before the next
  * annual fee posts (typically a few weeks after the prior year's fee).
@@ -107,7 +123,7 @@ export type GroceryItem = Item<GroceryBody> & { title: string; is_completed: boo
 export type RecipeItem = Item<RecipeBody> & { title: string };
 export type MealItem = Item<MealBody>;
 export type NoteItem = Item<string> & { title: string };
-export type InventoryItem = Item<unknown> & { title: string };
+export type InventoryItem = Item<InventoryBody> & { title: string };
 export type MaintenanceItem = Item<MaintenanceBody> & { title: string };
 export type CreditCardItem = Item<CreditCardBody> & { title: string };
 

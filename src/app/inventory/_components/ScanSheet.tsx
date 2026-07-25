@@ -11,6 +11,7 @@ import { LEVELS, LOCATIONS, nextLevel } from './constants';
 export interface ScanDraft {
   name: string;
   quantity: string;
+  weight: string;
   level?: PantryLevel;
   keep: boolean;
 }
@@ -19,7 +20,7 @@ interface ProviderInfo { id: string; label: string }
 interface ProviderResult {
   providerId: string;
   label: string;
-  items: { name: string; quantity?: string; level?: PantryLevel }[];
+  items: { name: string; quantity?: string; weight?: string; level?: PantryLevel }[];
   elapsedMs: number;
   error?: string;
 }
@@ -70,7 +71,7 @@ export default function ScanSheet({
   const [compare, setCompare] = useState(providers.length > 1);
 
   const showDrafts = (items: ProviderResult['items']) =>
-    setDrafts(items.map(i => ({ name: i.name, quantity: i.quantity ?? '', level: i.level, keep: true })));
+    setDrafts(items.map(i => ({ name: i.name, quantity: i.quantity ?? '', weight: i.weight ?? '', level: i.level, keep: true })));
 
   const handleFile = async (file: File) => {
     setError(null);
@@ -270,7 +271,16 @@ export default function ScanSheet({
                       onChange={e => patch(i, { quantity: e.target.value })}
                       placeholder="qty"
                       maxLength={LIMITS.title}
-                      style={{ width: 74, flexShrink: 0, padding: '6px 10px', fontSize: '0.82rem' }}
+                      style={{ width: 62, flexShrink: 0, padding: '6px 8px', fontSize: '0.8rem' }}
+                    />
+                    <input
+                      type="text"
+                      className="input"
+                      value={d.weight}
+                      onChange={e => patch(i, { weight: e.target.value })}
+                      placeholder="wt"
+                      maxLength={LIMITS.title}
+                      style={{ width: 62, flexShrink: 0, padding: '6px 8px', fontSize: '0.8rem' }}
                     />
                     <button
                       type="button"

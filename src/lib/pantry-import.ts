@@ -13,6 +13,7 @@ import type { PantryLevel, PantryLocation } from './types';
 export const CSV_COLUMNS = {
   item: ['item', 'name', 'product', 'ingredient'],
   quantity: ['quantity', 'qty', 'amount', 'count'],
+  weight: ['weight', 'wt', 'size', 'net weight', 'package size', 'volume'],
   location: ['location', 'where', 'place', 'area'],
   level: ['level', 'stock', 'fullness'],
 } as const;
@@ -36,6 +37,7 @@ export const MAX_IMPORT_ROWS = 500;
 export interface ImportItem {
   name: string;
   quantity?: string;
+  weight?: string;
   location?: PantryLocation;
   level?: PantryLevel;
 }
@@ -126,6 +128,9 @@ export function parsePantryCsv(text: string): ImportResult {
     const qty = cell('quantity');
     if (qty) item.quantity = capLen(qty, LIMITS.title);
 
+    const wt = cell('weight');
+    if (wt) item.weight = capLen(wt, LIMITS.title);
+
     const rawLoc = cell('location');
     if (rawLoc) {
       const loc = LOCATION_ALIASES[rawLoc.toLowerCase()];
@@ -153,10 +158,11 @@ export function parsePantryCsv(text: string): ImportResult {
 /** The exact structure the importer expects, as a downloadable starting point. */
 export function buildTemplateCsv(): string {
   return [
-    toCsvRow(['Item', 'Quantity', 'Location', 'Level']),
-    toCsvRow(['Black beans', '2 cans', 'Pantry', '']),
-    toCsvRow(['Olive oil', '1 bottle', 'Pantry', 'Low']),
-    toCsvRow(['Butter', '1', 'Fridge', '']),
-    toCsvRow(['Frozen peas', '2 bags', 'Freezer', 'High']),
+    toCsvRow(['Item', 'Quantity', 'Weight', 'Location', 'Level']),
+    toCsvRow(['Black beans', '2 cans', '15 oz', 'Pantry', '']),
+    toCsvRow(['Olive oil', '1 bottle', '500 ml', 'Pantry', 'Low']),
+    toCsvRow(['Rice', '1 bag', '5 lb', 'Pantry', 'High']),
+    toCsvRow(['Butter', '1', '', 'Fridge', '']),
+    toCsvRow(['Frozen peas', '2 bags', '12 oz', 'Freezer', 'High']),
   ].join('\r\n') + '\r\n';
 }

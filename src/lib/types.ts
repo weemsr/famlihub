@@ -60,6 +60,10 @@ export type PantryLevel = 'low' | 'medium' | 'high';
 
 export interface InventoryBody {
   quantity?: string;
+  /** Package size as printed, free text: "15 oz", "1 lb", "500g", "2 L".
+   *  Kept unparsed for the same reason as quantity — pantry units are mixed
+   *  and normalizing them loses the label's own wording. */
+  weight?: string;
   location?: PantryLocation;
   level?: PantryLevel;
 }

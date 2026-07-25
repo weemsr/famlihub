@@ -12,6 +12,15 @@ describe('parseScanResponse', () => {
     ]);
   });
 
+  it('keeps a legible package weight', () => {
+    expect(parseScanResponse('{"items":[{"name":"beans","quantity":"2","weight":"15 oz"}]}'))
+      .toEqual([{ name: 'beans', quantity: '2', weight: '15 oz' }]);
+  });
+
+  it('ignores a non-string weight', () => {
+    expect(parseScanResponse('{"items":[{"name":"beans","weight":{"oz":15}}]}')).toEqual([{ name: 'beans' }]);
+  });
+
   it('accepts a bare array', () => {
     expect(parseScanResponse('[{"name":"rice"}]')).toEqual([{ name: 'rice' }]);
   });

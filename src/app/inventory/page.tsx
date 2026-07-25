@@ -146,6 +146,8 @@ export default function InventoryPage() {
       const body: InventoryBody = { location };
       const qty = d.quantity.trim();
       if (qty) body.quantity = capLen(qty, LIMITS.title);
+      const wt = d.weight.trim();
+      if (wt) body.weight = capLen(wt, LIMITS.title);
       if (d.level) body.level = d.level;
       return {
         type: 'inventory',
@@ -187,6 +189,7 @@ export default function InventoryPage() {
         const body: InventoryBody = {};
         if (r.location) body.location = r.location;
         if (r.quantity) body.quantity = r.quantity;
+        if (r.weight) body.weight = r.weight;
         if (r.level) body.level = r.level;
         return { title: r.name, body };
       }));
@@ -216,6 +219,7 @@ export default function InventoryPage() {
     const nextBody: InventoryBody = { ...(item.body || {}), ...patch };
     // Drop keys explicitly cleared so the row doesn't keep empty strings.
     if (nextBody.quantity === '') delete nextBody.quantity;
+    if (nextBody.weight === '') delete nextBody.weight;
     if (patch.level === undefined && 'level' in patch) delete nextBody.level;
 
     const prevItems = items;
@@ -385,6 +389,7 @@ export default function InventoryPage() {
             key={item.id}
             item={item}
             onQuantity={(id, quantity) => patchBody(id, { quantity })}
+            onWeight={(id, weight) => patchBody(id, { weight })}
             onLevel={(id, level) => patchBody(id, { level })}
             onDelete={deleteItem}
           />

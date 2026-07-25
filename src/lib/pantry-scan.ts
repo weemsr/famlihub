@@ -48,6 +48,7 @@ export function listProviders(): VisionProvider[] {
 export interface ScanItem {
   name: string;
   quantity?: string;
+  weight?: string;
   level?: PantryLevel;
 }
 
@@ -88,7 +89,7 @@ export function parseScanResponse(raw: string): ScanItem[] {
   for (const row of rows) {
     if (out.length >= MAX_ITEMS) break;
     if (!row || typeof row !== 'object') continue;
-    const r = row as { name?: unknown; quantity?: unknown; level?: unknown };
+    const r = row as { name?: unknown; quantity?: unknown; weight?: unknown; level?: unknown };
 
     if (typeof r.name !== 'string') continue;
     const name = capLen(r.name.trim(), LIMITS.title);
@@ -100,6 +101,10 @@ export function parseScanResponse(raw: string): ScanItem[] {
       item.quantity = capLen(r.quantity.trim(), LIMITS.title);
     } else if (typeof r.quantity === 'number' && Number.isFinite(r.quantity)) {
       item.quantity = String(r.quantity);
+    }
+
+    if (typeof r.weight === 'string' && r.weight.trim()) {
+      item.weight = capLen(r.weight.trim(), LIMITS.title);
     }
 
     if (typeof r.level === 'string') {
@@ -120,9 +125,10 @@ List only food, drink, and grocery items you can actually SEE in this image.
 Rules:
 - Use short, plain names ("black beans", not "Goya Premium Black Beans 15.5oz").
 - Include "quantity" ONLY when you can genuinely count the items in the photo (e.g. "3", "2 bags"). Omit it otherwise.
+- Include "weight" ONLY when the package size is actually legible on the label (e.g. "15 oz", "1 lb", "500 ml"). Copy it as printed. Omit it if you cannot read it.
 - Include "level" as "low", "medium", or "high" ONLY for things measured by fullness rather than count, like spices, oils, or a partly used bag.
 - Do NOT guess at items that are hidden, unreadable, or that you merely expect to be there.
 - Ignore non-food objects, shelves, and containers that are empty.
 
 Respond with JSON only, in this exact shape:
-{"items":[{"name":"black beans","quantity":"2"},{"name":"paprika","level":"low"}]}`;
+{"items":[{"name":"black beans","quantity":"2","weight":"15 oz"},{"name":"paprika","level":"low"}]}`;

@@ -39,18 +39,29 @@ describe('parseCsv', () => {
 
 describe('parsePantryCsv — structure enforcement', () => {
   it('imports the documented shape', () => {
-    const res = parsePantryCsv('Item,Quantity,Location,Level\nRice,2 bags,Pantry,High');
+    const res = parsePantryCsv('Item,Quantity,Weight,Location,Level\nRice,2 bags,5 lb,Pantry,High');
     expect(res.fatal).toBeUndefined();
-    expect(res.items).toEqual([{ name: 'Rice', quantity: '2 bags', location: 'pantry', level: 'high' }]);
+    expect(res.items).toEqual([{ name: 'Rice', quantity: '2 bags', weight: '5 lb', location: 'pantry', level: 'high' }]);
     expect(res.issues).toHaveLength(0);
+  });
+
+  it('keeps weight as free text and accepts its aliases', () => {
+    expect(parsePantryCsv('Item,Weight\nBeans,15 oz').items[0].weight).toBe('15 oz');
+    expect(parsePantryCsv('Item,Size\nOil,500 ml').items[0].weight).toBe('500 ml');
+    expect(parsePantryCsv('Item,Net Weight\nRice,2.5 kg').items[0].weight).toBe('2.5 kg');
+  });
+
+  it('omits weight when the cell is blank', () => {
+    expect(parsePantryCsv('Item,Weight\nButter,').items[0]).toEqual({ name: 'Butter' });
   });
 
   it('accepts the generated template unchanged', () => {
     const res = parsePantryCsv(buildTemplateCsv());
     expect(res.fatal).toBeUndefined();
     expect(res.issues).toHaveLength(0);
-    expect(res.items).toHaveLength(4);
-    expect(res.items.map(i => i.location)).toEqual(['pantry', 'pantry', 'fridge', 'freezer']);
+    expect(res.items).toHaveLength(5);
+    expect(res.items.map(i => i.location)).toEqual(['pantry', 'pantry', 'pantry', 'fridge', 'freezer']);
+    expect(res.items[0].weight).toBe('15 oz');
   });
 
   it('rejects a file with no Item column instead of guessing', () => {

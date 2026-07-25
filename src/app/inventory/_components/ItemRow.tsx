@@ -13,64 +13,97 @@ import { LEVELS, nextLevel } from './constants';
 export default function ItemRow({
   item,
   onQuantity,
+  onWeight,
   onLevel,
   onDelete,
 }: {
   item: InventoryItem;
   onQuantity: (id: string, quantity: string) => void;
+  onWeight: (id: string, weight: string) => void;
   onLevel: (id: string, level: PantryLevel | undefined) => void;
   onDelete: (id: string) => void;
 }) {
   const body = item.body || {};
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(body.quantity || '');
+  // Which field is being edited inline, if any.
+  const [editing, setEditing] = useState<null | 'quantity' | 'weight'>(null);
+  const [draft, setDraft] = useState('');
+
+  const startEdit = (field: 'quantity' | 'weight') => {
+    setDraft((field === 'quantity' ? body.quantity : body.weight) || '');
+    setEditing(field);
+  };
 
   const commit = () => {
-    setEditing(false);
+    const field = editing;
+    setEditing(null);
+    if (!field) return;
     const next = draft.trim();
-    if (next !== (body.quantity || '')) onQuantity(item.id, next);
+    const current = (field === 'quantity' ? body.quantity : body.weight) || '';
+    if (next === current) return;
+    if (field === 'quantity') onQuantity(item.id, next);
+    else onWeight(item.id, next);
   };
 
   const levelMeta = LEVELS.find(l => l.id === body.level);
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderBottom: '1px solid var(--hairline)' }}>
-      <span style={{ fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+    <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '10px 0', borderBottom: '1px solid var(--hairline)' }}>
+      {/* Clamp to two lines: scanned names can be verbose ("extra virgin olive
+          oil, cold pressed") and unbounded wrapping made rows five lines tall. */}
+      <span
+        title={item.title}
+        style={{
+          fontWeight: 600, flex: 1, minWidth: 0, overflow: 'hidden',
+          display: '-webkit-box', WebkitBoxOrient: 'vertical', WebkitLineClamp: 2,
+          lineHeight: 1.35, wordBreak: 'break-word',
+        }}
+      >
         {item.title}
       </span>
 
-      {editing ? (
-        <input
-          autoFocus
-          type="text"
-          className="input"
-          value={draft}
-          onChange={e => setDraft(e.target.value)}
-          onBlur={commit}
-          onKeyDown={e => {
-            if (e.key === 'Enter') commit();
-            if (e.key === 'Escape') { setDraft(body.quantity || ''); setEditing(false); }
-          }}
-          placeholder="qty"
-          maxLength={LIMITS.title}
-          style={{ width: 96, padding: '4px 10px', fontSize: '0.82rem', flexShrink: 0 }}
-        />
-      ) : (
-        <button
-          type="button"
-          onClick={() => { setDraft(body.quantity || ''); setEditing(true); }}
-          aria-label={`Set quantity for ${item.title}`}
-          style={{
-            flexShrink: 0, minWidth: 56, padding: '4px 10px', borderRadius: 999,
-            background: 'var(--surface-hover)',
-            color: body.quantity ? 'var(--text-primary)' : 'var(--text-secondary)',
-            border: 'none', fontSize: '0.8rem', fontWeight: 600,
-            cursor: 'pointer', touchAction: 'manipulation',
-          }}
-        >
-          {body.quantity || 'qty'}
-        </button>
-      )}
+      {(['quantity', 'weight'] as const).map(field => {
+        const value = field === 'quantity' ? body.quantity : body.weight;
+        const placeholder = field === 'quantity' ? 'qty' : 'wt';
+        if (editing === field) {
+          return (
+            <input
+              key={field}
+              autoFocus
+              type="text"
+              className="input"
+              value={draft}
+              onChange={e => setDraft(e.target.value)}
+              onBlur={commit}
+              onKeyDown={e => {
+                if (e.key === 'Enter') commit();
+                if (e.key === 'Escape') setEditing(null);
+              }}
+              placeholder={placeholder}
+              maxLength={LIMITS.title}
+              style={{ width: 84, padding: '4px 8px', fontSize: '0.8rem', flexShrink: 0 }}
+            />
+          );
+        }
+        return (
+          <button
+            key={field}
+            type="button"
+            onClick={() => startEdit(field)}
+            aria-label={`Set ${field} for ${item.title}`}
+            style={{
+              flexShrink: 0, minWidth: 46, maxWidth: 84, overflow: 'hidden',
+              textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+              padding: '4px 8px', borderRadius: 999,
+              background: 'var(--surface-hover)',
+              color: value ? 'var(--text-primary)' : 'var(--text-secondary)',
+              border: 'none', fontSize: '0.78rem', fontWeight: 600,
+              cursor: 'pointer', touchAction: 'manipulation',
+            }}
+          >
+            {value || placeholder}
+          </button>
+        );
+      })}
 
       <button
         type="button"

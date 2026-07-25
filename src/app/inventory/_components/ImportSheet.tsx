@@ -81,7 +81,7 @@ export default function ImportSheet({
         <div style={{ padding: '12px 14px', background: 'var(--surface-hover)', borderRadius: 12, marginBottom: 16 }}>
           <p className="text-sm" style={{ color: 'var(--text-primary)', marginBottom: 8 }}>
             Your CSV needs a header row with an <strong>Item</strong> column. <strong>Quantity</strong>,
-            {' '}<strong>Location</strong>, and <strong>Level</strong> are optional.
+            {' '}<strong>Weight</strong>, <strong>Location</strong>, and <strong>Level</strong> are optional.
           </p>
           <p className="text-sm" style={{ marginBottom: 10 }}>
             Location must be Pantry, Fridge, or Freezer. Level must be Low, Medium, or High.
@@ -184,7 +184,11 @@ export default function ImportSheet({
                   {result.items.slice(0, 30).map((it, i) => (
                     <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '6px 0', borderBottom: '1px solid var(--hairline)' }}>
                       <span style={{ flex: 1, minWidth: 0, fontSize: '0.88rem', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{it.name}</span>
-                      {it.quantity && <span className="text-sm" style={{ flexShrink: 0 }}>{it.quantity}</span>}
+                      {(it.quantity || it.weight) && (
+                        <span className="text-sm" style={{ flexShrink: 0 }}>
+                          {[it.quantity, it.weight].filter(Boolean).join(' · ')}
+                        </span>
+                      )}
                       <span className="text-sm" style={{ flexShrink: 0, minWidth: 62, textAlign: 'right' }}>{locLabel(it.location)}</span>
                     </div>
                   ))}

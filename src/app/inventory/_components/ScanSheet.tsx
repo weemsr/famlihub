@@ -3,6 +3,8 @@ import { useRef, useState } from 'react';
 import Image from 'next/image';
 import { X, Camera, Loader2 } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import { mergeScanItems } from '@/lib/pantry-merge';
+import type { ScanItem } from '@/lib/pantry-scan';
 import { LIMITS } from '@/lib/limits';
 import type { PantryLevel, PantryLocation } from '@/lib/types';
 import { useDialog } from '@/components/useDialog';
@@ -59,11 +61,14 @@ export default function ScanSheet({
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const [location, setLocation] = useState<PantryLocation>(defaultLocation);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [previews, setPreviews] = useState<string[]>([]);
   const [scanning, setScanning] = useState(false);
+  const [progress, setProgress] = useState({ done: 0, total: 0 });
   const [error, setError] = useState<string | null>(null);
   const [results, setResults] = useState<ProviderResult[] | null>(null);
   const [chosenProvider, setChosenProvider] = useState<string | null>(null);
+  const [photoCount, setPhotoCount] = useState(0);
+  const [failedCount, setFailedCount] = useState(0);
   const [drafts, setDrafts] = useState<ScanDraft[]>([]);
   const [importing, setImporting] = useState(false);
   // With multiple providers configured, compare them on the same photo so the
@@ -73,34 +78,87 @@ export default function ScanSheet({
   const showDrafts = (items: ProviderResult['items']) =>
     setDrafts(items.map(i => ({ name: i.name, quantity: i.quantity ?? '', weight: i.weight ?? '', level: i.level, keep: true })));
 
-  const handleFile = async (file: File) => {
+  /**
+   * Scan a batch of shelf photos. Each photo is a separate request (kept small
+   * and independently retryable); at most 3 run at once so a 15-photo batch
+   * doesn't open 15 sockets or hit provider rate limits. Results across photos
+   * are merged so overlapping shots don't produce a list of duplicates.
+   */
+  const handleFiles = async (files: File[]) => {
     setError(null);
     setResults(null);
     setDrafts([]);
+    setFailedCount(0);
+    setPhotoCount(files.length);
+    setProgress({ done: 0, total: files.length });
     setScanning(true);
-    try {
-      const { base64, mediaType, preview: dataUrl } = await downscale(file);
-      setPreview(dataUrl);
 
+    try {
       const { data: sess } = await supabase.auth.getSession();
       const jwt = sess.session?.access_token;
       if (!jwt) throw new Error('Session expired — sign in again.');
 
       const ids = compare ? providers.map(p => p.id) : [providers[0].id];
-      const res = await fetch('/api/pantry-scan', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
-        body: JSON.stringify({ imageBase64: base64, mediaType, providerIds: ids }),
-      });
-      const json = await res.json() as { results?: ProviderResult[]; error?: string };
-      if (!res.ok) throw new Error(json.error || `Scan failed (${res.status})`);
+      const thumbs: string[] = [];
+      // Per-provider accumulation so the comparison view still works on a batch.
+      const byProvider = new Map<string, { label: string; batches: ScanItem[][]; ms: number; errors: string[] }>();
+      let failures = 0;
 
-      const list = json.results ?? [];
-      setResults(list);
-      const best = [...list].sort((a, b) => b.items.length - a.items.length)[0];
+      const scanOne = async (file: File) => {
+        try {
+          const { base64, mediaType, preview } = await downscale(file);
+          if (thumbs.length < 6) thumbs.push(preview);
+
+          const res = await fetch('/api/pantry-scan', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
+            body: JSON.stringify({ imageBase64: base64, mediaType, providerIds: ids }),
+          });
+          const json = await res.json() as { results?: ProviderResult[]; error?: string };
+          if (!res.ok) throw new Error(json.error || `Scan failed (${res.status})`);
+
+          for (const r of json.results ?? []) {
+            const acc = byProvider.get(r.providerId) ?? { label: r.label, batches: [], ms: 0, errors: [] };
+            if (r.items.length > 0) acc.batches.push(r.items);
+            if (r.error) acc.errors.push(r.error);
+            acc.ms += r.elapsedMs;
+            byProvider.set(r.providerId, acc);
+          }
+        } catch {
+          failures++; // one bad photo shouldn't abort the batch
+        } finally {
+          setProgress(p => ({ ...p, done: p.done + 1 }));
+        }
+      };
+
+      // Simple concurrency pool of 3.
+      const queue = [...files];
+      await Promise.all(Array.from({ length: Math.min(3, queue.length) }, async () => {
+        for (;;) {
+          const next = queue.shift();
+          if (!next) return;
+          await scanOne(next);
+        }
+      }));
+
+      setPreviews(thumbs);
+      setFailedCount(failures);
+
+      const merged: ProviderResult[] = [...byProvider.entries()].map(([providerId, acc]) => ({
+        providerId,
+        label: acc.label,
+        items: mergeScanItems(acc.batches),
+        elapsedMs: acc.ms,
+        ...(acc.batches.length === 0 ? { error: acc.errors[0] ?? 'No items recognized.' } : {}),
+      }));
+      setResults(merged);
+
+      const best = [...merged].sort((a, b) => b.items.length - a.items.length)[0];
       if (best && best.items.length > 0) {
         setChosenProvider(best.providerId);
         showDrafts(best.items);
+      } else if (failures === files.length) {
+        setError('None of those photos could be read. Check your connection and try again.');
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong.');
@@ -121,11 +179,11 @@ export default function ScanSheet({
         className="bottom-sheet"
         role="dialog"
         aria-modal="true"
-        aria-label="Scan a shelf photo"
+        aria-label="Scan shelf photos"
         onClick={e => e.stopPropagation()}
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <h2 style={{ marginBottom: 0 }}>Scan a shelf</h2>
+          <h2 style={{ marginBottom: 0 }}>Scan shelves</h2>
           <button
             type="button"
             onClick={onClose}
@@ -167,7 +225,7 @@ export default function ScanSheet({
             {providers.length > 1 && (
               <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 16, fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
                 <input type="checkbox" className="checkbox-input" checked={compare} onChange={e => setCompare(e.target.checked)} />
-                Compare all {providers.length} models on this photo
+                Compare all {providers.length} models on these photos
               </label>
             )}
 
@@ -175,11 +233,11 @@ export default function ScanSheet({
               ref={fileRef}
               type="file"
               accept="image/*"
-              capture="environment"
+              multiple
               style={{ display: 'none' }}
               onChange={e => {
-                const f = e.target.files?.[0];
-                if (f) handleFile(f);
+                const files = Array.from(e.target.files ?? []);
+                if (files.length > 0) handleFiles(files.slice(0, 20));
                 e.target.value = '';
               }}
             />
@@ -190,17 +248,36 @@ export default function ScanSheet({
               onClick={() => fileRef.current?.click()}
               style={{ marginBottom: 12, touchAction: 'manipulation' }}
             >
-              {scanning ? <><Loader2 size={18} className="spin" /> Reading shelf…</> : <><Camera size={18} /> Take photo</>}
+              {scanning
+                ? <><Loader2 size={18} className="spin" /> Reading photo {Math.min(progress.done + 1, progress.total)} of {progress.total}…</>
+                : <><Camera size={18} /> Select shelf photos</>}
             </button>
             <p className="text-sm" style={{ marginBottom: 12 }}>
-              Photos are used only to identify items and are never saved.
+              Pick every photo of this area at once — up to 20. Duplicates across
+              photos are merged automatically. Photos are never saved.
             </p>
           </>
         )}
 
-        {preview && drafts.length === 0 && (
-          <div style={{ position: 'relative', width: '100%', height: 160, borderRadius: 12, overflow: 'hidden', marginBottom: 12 }}>
-            <Image src={preview} alt="Shelf preview" fill sizes="(max-width: 600px) 100vw, 600px" style={{ objectFit: 'cover' }} unoptimized />
+        {scanning && progress.total > 1 && (
+          <div style={{ height: 6, borderRadius: 999, background: 'var(--surface-hover)', overflow: 'hidden', marginBottom: 12 }}>
+            <div
+              style={{
+                height: '100%', borderRadius: 999, background: 'var(--accent-color)',
+                width: `${Math.round((progress.done / progress.total) * 100)}%`,
+                transition: 'width 200ms ease',
+              }}
+            />
+          </div>
+        )}
+
+        {previews.length > 0 && drafts.length === 0 && !scanning && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto' }}>
+            {previews.map((src, i) => (
+              <div key={i} style={{ position: 'relative', width: 72, height: 72, borderRadius: 10, overflow: 'hidden', flexShrink: 0 }}>
+                <Image src={src} alt="" fill sizes="72px" style={{ objectFit: 'cover' }} unoptimized />
+              </div>
+            ))}
           </div>
         )}
 
@@ -243,7 +320,14 @@ export default function ScanSheet({
         {/* Step 3 — review before anything is written */}
         {drafts.length > 0 && (
           <>
-            <label className="form-label">Found {drafts.length} items — uncheck any that are wrong</label>
+            <label className="form-label">
+              Found {drafts.length} items across {photoCount} photo{photoCount === 1 ? '' : 's'} — uncheck any that are wrong
+            </label>
+            {failedCount > 0 && (
+              <p className="text-sm" style={{ color: 'var(--warning-fg)', marginBottom: 8 }}>
+                {failedCount} photo{failedCount === 1 ? '' : 's'} couldn&apos;t be read and {failedCount === 1 ? 'was' : 'were'} skipped.
+              </p>
+            )}
             <div style={{ display: 'flex', flexDirection: 'column', marginBottom: 16 }}>
               {drafts.map((d, i) => {
                 const levelMeta = LEVELS.find(l => l.id === d.level);
@@ -325,7 +409,7 @@ export default function ScanSheet({
               <button
                 type="button"
                 className="btn btn-secondary"
-                onClick={() => { setDrafts([]); setResults(null); setPreview(null); }}
+                onClick={() => { setDrafts([]); setResults(null); setPreviews([]); setPhotoCount(0); setFailedCount(0); }}
                 style={{ width: 'auto', padding: '10px 18px', touchAction: 'manipulation' }}
               >
                 New photo

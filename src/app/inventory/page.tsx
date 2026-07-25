@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { Plus, PackageOpen, ListPlus, Camera } from 'lucide-react';
+import { Plus, PackageOpen, ListPlus, Camera, FileSpreadsheet, Sparkles } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LIMITS, capLen } from '@/lib/limits';
 import type { InventoryBody, InventoryItem, PantryLocation } from '@/lib/types';
@@ -8,6 +8,9 @@ import PageHeader from '@/components/PageHeader';
 import { useUndoDelete } from '@/components/UndoSnackbar';
 import BulkAddSheet from './_components/BulkAddSheet';
 import ScanSheet, { type ScanDraft } from './_components/ScanSheet';
+import ImportSheet from './_components/ImportSheet';
+import type { ImportItem } from '@/lib/pantry-import';
+import { PANTRY_STAPLES } from './seed';
 import ItemRow from './_components/ItemRow';
 import { LOCATIONS } from './_components/constants';
 
@@ -23,6 +26,9 @@ export default function InventoryPage() {
   const [activeLocation, setActiveLocation] = useState<PantryLocation>('pantry');
   const [scanOpen, setScanOpen] = useState(false);
   const [providers, setProviders] = useState<{ id: string; label: string }[]>([]);
+  const [importOpen, setImportOpen] = useState(false);
+  const [importSaving, setImportSaving] = useState(false);
+  const [seedBusy, setSeedBusy] = useState(false);
   const [bulkOpen, setBulkOpen] = useState(false);
   const [bulkSaving, setBulkSaving] = useState(false);
   const [bulkError, setBulkError] = useState<string | null>(null);
@@ -155,6 +161,54 @@ export default function InventoryPage() {
     setActiveLocation(location);
   };
 
+  /** Insert many rows at once and prepend them locally. Shared by every
+   *  bulk path (CSV import, staples, scan) so they behave identically. */
+  const insertMany = async (rows: { title: string; body: InventoryBody }[]) => {
+    if (rows.length === 0) return;
+    const { data: userData } = await supabase.auth.getUser();
+    if (!userData.user) throw new Error('Not signed in');
+    const payload = rows
+      .map(r => ({
+        type: 'inventory',
+        title: capLen(r.title.trim(), LIMITS.title),
+        body: r.body,
+        user_id: userData.user!.id,
+      }))
+      .filter(r => r.title);
+    const { data, error } = await supabase.from('items').insert(payload).select();
+    if (error) throw error;
+    if (data) setItems(prev => [...(data as unknown as InventoryItem[]).reverse(), ...prev]);
+  };
+
+  const importCsv = async (rows: ImportItem[]) => {
+    setImportSaving(true);
+    try {
+      await insertMany(rows.map(r => {
+        const body: InventoryBody = {};
+        if (r.location) body.location = r.location;
+        if (r.quantity) body.quantity = r.quantity;
+        if (r.level) body.level = r.level;
+        return { title: r.name, body };
+      }));
+    } finally {
+      setImportSaving(false);
+    }
+  };
+
+  /** Add only the staples not already present (case-insensitive). */
+  const addStaples = async () => {
+    setSeedBusy(true);
+    try {
+      const have = new Set(items.map(i => i.title.trim().toLowerCase()));
+      const missing = PANTRY_STAPLES.filter(s => !have.has(s.title.toLowerCase()));
+      await insertMany(missing.map(s => ({ title: s.title, body: { location: s.location } })));
+    } catch {
+      // Non-fatal: realtime will reconcile if part of the batch landed.
+    } finally {
+      setSeedBusy(false);
+    }
+  };
+
   /** Patch one item's body optimistically, reverting the row on failure. */
   const patchBody = async (id: string, patch: Partial<InventoryBody>) => {
     const item = items.find(i => i.id === id);
@@ -206,6 +260,14 @@ export default function InventoryPage() {
                 <Camera size={16} /> Scan
               </button>
             )}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setImportOpen(true)}
+              style={{ padding: '8px 14px', width: 'auto', borderRadius: 999, touchAction: 'manipulation' }}
+            >
+              <FileSpreadsheet size={16} /> Import
+            </button>
             <button
               type="button"
               className="btn btn-secondary"
@@ -297,11 +359,21 @@ export default function InventoryPage() {
           </div>
         )}
         {loaded && items.length === 0 && (
-          <p style={{ color: 'var(--text-secondary)', textAlign: 'center' }}>
-            Pantry is empty. {providers.length > 0
-              ? <>Tap <strong>Scan</strong> to photograph a shelf and build your list automatically.</>
-              : <>Tap <strong>Add many</strong> to capture a whole shelf at once.</>}
-          </p>
+          <div style={{ textAlign: 'center', padding: '8px 0 4px' }}>
+            <p style={{ color: 'var(--text-secondary)', marginBottom: 14 }}>
+              Nothing here yet. Start with the staples, then import a spreadsheet
+              {providers.length > 0 ? ' or scan a shelf' : ''}.
+            </p>
+            <button
+              type="button"
+              className="btn"
+              disabled={seedBusy}
+              onClick={addStaples}
+              style={{ width: 'auto', padding: '10px 18px', touchAction: 'manipulation' }}
+            >
+              <Sparkles size={16} /> {seedBusy ? 'Adding…' : `Add ${PANTRY_STAPLES.length} common staples`}
+            </button>
+          </div>
         )}
         {loaded && items.length > 0 && visibleItems.length === 0 && (
           <p style={{ color: 'var(--text-secondary)', textAlign: 'center', padding: '12px 0' }}>
@@ -325,6 +397,14 @@ export default function InventoryPage() {
           defaultLocation={activeLocation}
           onImport={importScanned}
           onClose={() => setScanOpen(false)}
+        />
+      )}
+
+      {importOpen && (
+        <ImportSheet
+          saving={importSaving}
+          onImport={importCsv}
+          onClose={() => setImportOpen(false)}
         />
       )}
 

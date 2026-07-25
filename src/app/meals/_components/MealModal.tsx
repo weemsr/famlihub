@@ -1,6 +1,6 @@
 "use client";
-import { useEffect } from 'react';
 import { LIMITS } from '@/lib/limits';
+import { useDialog } from '@/components/useDialog';
 import type { RecipeItem } from './constants';
 
 export default function MealModal({
@@ -38,17 +38,11 @@ export default function MealModal({
   onChangeNote: (value: string) => void;
   onSave: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useDialog(onClose);
 
   return (
     <div className="bottom-sheet-overlay">
-      <div className="bottom-sheet">
+      <div ref={dialogRef} className="bottom-sheet" role="dialog" aria-modal="true" aria-label={`Add ${activeMeal} for ${activeDayLabel}`}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
           <div>
             <h2 style={{ marginBottom: 2 }}>{activeMeal}</h2>

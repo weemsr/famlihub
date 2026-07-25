@@ -1,7 +1,7 @@
 "use client";
-import { useEffect } from 'react';
 import { X } from 'lucide-react';
 import { LIMITS } from '@/lib/limits';
+import { useDialog } from '@/components/useDialog';
 import { INTERVAL_PRESETS, type FormState } from './utils';
 
 export default function ItemForm({
@@ -19,15 +19,11 @@ export default function ItemForm({
   onSave: () => void;
   onClose: () => void;
 }) {
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') onClose(); };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useDialog(onClose);
 
   return (
     <div className="bottom-sheet-overlay">
-      <div className="bottom-sheet">
+      <div ref={dialogRef} className="bottom-sheet" role="dialog" aria-modal="true" aria-label={form.id ? 'Edit maintenance item' : 'Add maintenance item'}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
           <h2 style={{ marginBottom: 0 }}>{form.id ? 'Edit item' : 'Add item'}</h2>
           <button

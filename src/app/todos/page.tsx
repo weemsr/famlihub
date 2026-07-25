@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import type { TodoBody } from '@/lib/types';
 import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
+import { useUndoDelete } from '@/components/UndoSnackbar';
 
 interface TodoItem {
   id: string;
@@ -29,6 +30,8 @@ export default function TodosPage() {
   const [showCompleted, setShowCompleted] = useState(false);
   const [collapsedCategories, setCollapsedCategories] = useState<Record<string, boolean>>({});
   const [moverOpenId, setMoverOpenId] = useState<string | null>(null);
+  const [loaded, setLoaded] = useState(false);
+  const { offerUndo, snackbar } = useUndoDelete();
 
   // Close the category mover popover when clicking anywhere else.
   useEffect(() => {
@@ -71,7 +74,7 @@ export default function TodosPage() {
       const { data } = await supabase.from('items').select('*').eq('type', 'todo').order('created_at', { ascending: false });
       return data ?? null;
     };
-    fetchItems().then(d => { if (d) setItems(d); });
+    fetchItems().then(d => { if (d) setItems(d); setLoaded(true); });
   }, []);
 
   useEffect(() => {
@@ -122,10 +125,15 @@ export default function TodosPage() {
   };
 
   const deleteItem = async (id: string) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
     const prevItems = items;
     setItems(items.filter(i => i.id !== id));
     const { error } = await supabase.from('items').delete().eq('id', id);
-    if (error) setItems(prevItems);
+    if (error) { setItems(prevItems); return; }
+    offerUndo(item.title, item as unknown as Record<string, unknown>, () => {
+      setItems(prev => (prev.some(i => i.id === item.id) ? prev : [item, ...prev]));
+    });
   };
 
   const startEdit = (item: TodoItem) => {
@@ -147,6 +155,7 @@ export default function TodosPage() {
   return (
     <div style={{ paddingBottom: 60 }}>
       <PageHeader icon={CheckSquare} color="#7B3FE4" title="To-do" />
+      {snackbar}
       
       <div className="card" style={{ marginBottom: 24 }}>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -196,7 +205,13 @@ export default function TodosPage() {
             
             {!isCollapsed && (
               <div style={{ display: 'flex', flexDirection: 'column', padding: '12px 20px', gap: 0, minHeight: 60 }}>
-                {catItems.length === 0 && <p style={{color: 'var(--text-secondary)', fontSize: '0.85rem', padding: '8px 0', margin: 0, fontStyle: 'italic'}}>Add a new task above...</p>}
+                {!loaded && catItems.length === 0 && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '8px 0' }}>
+                    <div className="skeleton" style={{ height: 14, width: '62%' }} />
+                    <div className="skeleton" style={{ height: 14, width: '40%' }} />
+                  </div>
+                )}
+                {loaded && catItems.length === 0 && <p style={{color: 'var(--text-secondary)', fontSize: '0.85rem', padding: '8px 0', margin: 0, fontStyle: 'italic'}}>Add a new task above...</p>}
                 
                 {catItems.map((item, idx) => {
                   const isEditing = editingId === item.id;

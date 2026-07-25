@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { LIMITS, capLen } from '@/lib/limits';
 import Fab from '@/components/Fab';
 import PageHeader from '@/components/PageHeader';
+import { useUndoDelete } from '@/components/UndoSnackbar';
 
 interface NoteItem {
   id: string;
@@ -22,6 +23,8 @@ export default function NotesPage() {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const { offerUndo, snackbar } = useUndoDelete();
 
   // Fetch is separated from state application (applied in a .then callback)
   // for react-hooks/set-state-in-effect compliance; memoized so the mount
@@ -33,7 +36,7 @@ export default function NotesPage() {
       const { data } = await supabase.from('items').select('*').eq('type', 'note').order('created_at', { ascending: false });
       return (data as unknown as NoteItem[]) ?? null;
     };
-    fetchItems().then(d => { if (d) setItems(d); });
+    fetchItems().then(d => { if (d) setItems(d); setLoaded(true); });
   }, []);
 
   useEffect(() => {
@@ -71,10 +74,15 @@ export default function NotesPage() {
 
   const deleteNote = async (id: string, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
+    const note = items.find(i => i.id === id);
+    if (!note) return;
     const prevItems = items;
     setItems(items.filter(i => i.id !== id));
     const { error } = await supabase.from('items').delete().eq('id', id);
-    if (error) setItems(prevItems);
+    if (error) { setItems(prevItems); return; }
+    offerUndo(note.title, note as unknown as Record<string, unknown>, () => {
+      setItems(prev => (prev.some(i => i.id === note.id) ? prev : [note, ...prev]));
+    });
   };
 
   const startEdit = (note: NoteItem, e: React.MouseEvent) => {
@@ -104,6 +112,7 @@ export default function NotesPage() {
 
   return (
     <div>
+      {snackbar}
       <PageHeader
         icon={StickyNote}
         color="#C29500"
@@ -138,7 +147,13 @@ export default function NotesPage() {
         </div>
       )}
 
-      {items.length === 0 && !isCreating && <p style={{textAlign: 'center', color: 'var(--text-secondary)', marginTop: 40}}>Board is empty!</p>}
+      {!loaded && items.length === 0 && !isCreating && (
+        <div className="card" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+          <div className="skeleton" style={{ height: 16, width: '50%' }} />
+          <div className="skeleton" style={{ height: 12, width: '80%' }} />
+        </div>
+      )}
+      {loaded && items.length === 0 && !isCreating && <p style={{textAlign: 'center', color: 'var(--text-secondary)', marginTop: 40}}>Board is empty!</p>}
 
       {items.map(note => {
         const isExpanded = expandedId === note.id;

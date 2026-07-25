@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase';
 import { groceryOrderStamp, type GroceryBody, type GroceryStore } from '@/lib/types';
 import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
+import { useUndoDelete } from '@/components/UndoSnackbar';
 import SortableGroceryRow from './_components/SortableGroceryRow';
 
 interface GroceryItem {
@@ -58,6 +59,8 @@ export default function GroceriesPage() {
   const [regularInput, setRegularInput] = useState('');
   const [costcoInput, setCostcoInput] = useState('');
   const [asianInput, setAsianInput] = useState('');
+  const [loaded, setLoaded] = useState(false);
+  const { offerUndo, snackbar } = useUndoDelete();
 
   // Sensors tuned for mobile + desktop. The 6px activation distance on the
   // pointer sensor prevents accidental drags when the user is really just
@@ -83,7 +86,7 @@ export default function GroceriesPage() {
 
       return (data as unknown as GroceryItem[]) ?? null;
     };
-    fetchItems().then(d => { if (d) setItems(d); });
+    fetchItems().then(d => { if (d) setItems(d); setLoaded(true); });
   }, []);
 
   useEffect(() => {
@@ -151,10 +154,15 @@ export default function GroceriesPage() {
   };
 
   const deleteItem = async (id: string) => {
+    const item = items.find(i => i.id === id);
+    if (!item) return;
     const prevItems = items;
     setItems(items.filter(i => i.id !== id));
     const { error } = await supabase.from('items').delete().eq('id', id);
-    if (error) setItems(prevItems);
+    if (error) { setItems(prevItems); return; }
+    offerUndo(item.title, item as unknown as Record<string, unknown>, () => {
+      setItems(prev => (prev.some(i => i.id === item.id) ? prev : [...prev, item]));
+    });
   };
 
   /**
@@ -202,7 +210,13 @@ export default function GroceriesPage() {
       </div>
 
       <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-        {list.length === 0 && <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>No items yet.</span>}
+        {!loaded && list.length === 0 && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10, padding: '4px 0' }}>
+            <div className="skeleton" style={{ height: 14, width: '58%' }} />
+            <div className="skeleton" style={{ height: 14, width: '36%' }} />
+          </div>
+        )}
+        {loaded && list.length === 0 && <span style={{ color: 'var(--text-secondary)', fontSize: 14 }}>No items yet.</span>}
         {list.length > 0 && (
           <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd(list)}>
             <SortableContext items={list.map(i => i.id)} strategy={verticalListSortingStrategy}>
@@ -226,6 +240,7 @@ export default function GroceriesPage() {
   return (
     <div>
       <PageHeader icon={ShoppingBag} color="#E05B1C" title="Groceries" />
+      {snackbar}
       {renderSection('Regular Groceries', 'regular', regularItems, regularInput, setRegularInput)}
       {renderSection('Costco Run', 'costco', costcoItems, costcoInput, setCostcoInput)}
       {renderSection('Asian Market', 'asian', asianItems, asianInput, setAsianInput)}

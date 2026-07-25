@@ -9,7 +9,7 @@ export default function StatusPill({ status, daysFromNow }: { status: Status; da
         : `${Math.abs(daysFromNow)} day${Math.abs(daysFromNow) === 1 ? '' : 's'} overdue`,
     },
     soon: {
-      bg: '#fef3c7', fg: '#92400e',
+      bg: 'var(--warning-bg)', fg: 'var(--warning-fg)',
       label: `Cancel in ${daysFromNow} day${daysFromNow === 1 ? '' : 's'}`,
     },
     upcoming: {

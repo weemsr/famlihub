@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Search, NotebookText } from 'lucide-react';
 import { fetchRecipeFromUrl } from '@/app/actions/recipe';
 import { supabase } from '@/lib/supabase';
 import { asStringArray, type RecipeBody } from '@/lib/types';
 import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
+import { useUndoDelete } from '@/components/UndoSnackbar';
 import RecipeImporter, { type CreationMode } from './_components/RecipeImporter';
 import RecipeCard, { type RecipeItem } from './_components/RecipeCard';
 
@@ -38,10 +39,11 @@ export default function RecipesPage() {
   const [manualServings, setManualServings] = useState('');
   const [manualIngredients, setManualIngredients] = useState('');
   const [manualInstructions, setManualInstructions] = useState('');
+  const { offerUndo, snackbar } = useUndoDelete();
 
   // Fetch is separated from state application so the mount effect applies
   // data in .then callbacks (react-hooks/set-state-in-effect compliant).
-  const loadRecipes = () => {
+  const loadRecipes = useCallback(() => {
     supabase.auth.getUser().then(({ data: userData }) => {
       if (!userData.user) { setListLoading(false); return; }
 
@@ -67,9 +69,19 @@ export default function RecipesPage() {
           setListLoading(false);
         });
     });
-  };
+  }, []);
 
-  useEffect(() => { loadRecipes(); }, []);
+  useEffect(() => {
+    loadRecipes();
+    // Realtime: recipe edits/imports from another device refresh this list
+    // (every other tab already had this; recipes was the gap).
+    const channel = supabase.channel('realtime:recipes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'items', filter: 'type=eq.recipe' }, () => {
+        loadRecipes();
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [loadRecipes]);
 
   // Keep the module cache in sync after the first load so add/edit/delete are
   // reflected instantly when the user navigates back to this tab.
@@ -153,10 +165,15 @@ export default function RecipesPage() {
   };
 
   const deleteRecipe = async (id: string) => {
+    const recipe = recipes.find(r => r.id === id);
+    if (!recipe) return;
     const prevRecipes = recipes;
     setRecipes(recipes.filter(r => r.id !== id));
     const { error } = await supabase.from('items').delete().eq('id', id);
-    if (error) setRecipes(prevRecipes);
+    if (error) { setRecipes(prevRecipes); return; }
+    offerUndo(recipe.title, recipe as unknown as Record<string, unknown>, () => {
+      setRecipes(prev => (prev.some(r => r.id === recipe.id) ? prev : [recipe, ...prev]));
+    });
   };
 
   const startEdit = (recipe: RecipeItem, e: React.MouseEvent) => {
@@ -208,6 +225,7 @@ export default function RecipesPage() {
   return (
     <div>
       <PageHeader icon={NotebookText} color="#B87333" title="Recipes" />
+      {snackbar}
 
       <RecipeImporter
         mode={creationMode}

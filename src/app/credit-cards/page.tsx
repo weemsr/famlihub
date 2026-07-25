@@ -197,8 +197,8 @@ export default function CreditCardsPage() {
               className="card"
               style={{
                 padding: '12px 16px', marginBottom: 12,
-                background: '#fef3c7', border: '1px solid #fde68a',
-                color: '#78350f', display: 'flex', alignItems: 'center', gap: 8,
+                background: 'var(--warning-bg)', border: '1px solid var(--warning-border)',
+                color: 'var(--warning-fg)', display: 'flex', alignItems: 'center', gap: 8,
                 fontSize: '0.88rem', fontWeight: 600,
               }}
             >

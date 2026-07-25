@@ -1,9 +1,9 @@
 "use client";
-import { useEffect } from 'react';
 import Image from 'next/image';
 import { X, ChefHat, ExternalLink } from 'lucide-react';
 import { safeImageUrl, safeHttpUrl } from '@/lib/url';
 import RecipeDisplay from '@/components/RecipeDisplay';
+import { useDialog } from '@/components/useDialog';
 import type { RecipeItem } from './constants';
 
 /**
@@ -25,14 +25,7 @@ export default function MealRecipeViewer({
   note?: string;
   onClose: () => void;
 }) {
-  // Close on Escape, mirroring native dialog behavior.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
+  const dialogRef = useDialog(onClose);
 
   const heroImage = safeImageUrl(recipe.body?.image);
   const sourceUrl = safeHttpUrl(recipe.body?.sourceUrl);
@@ -45,7 +38,7 @@ export default function MealRecipeViewer({
       aria-modal="true"
       aria-label={`${recipe.title} recipe`}
     >
-      <div className="bottom-sheet" onClick={e => e.stopPropagation()}>
+      <div ref={dialogRef} className="bottom-sheet" onClick={e => e.stopPropagation()}>
         {/* Grab handle */}
         <div
           aria-hidden

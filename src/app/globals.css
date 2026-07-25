@@ -11,6 +11,9 @@
   --accent-hover: #7baea0;
   --danger-color: #FF7C7C;
   --success-color: #70D69A;
+  --warning-bg: #fef3c7;
+  --warning-fg: #78350f;
+  --warning-border: #fde68a;
   --border-radius: 24px;
   --spacing-unit: 8px;
   --nav-height: 80px;
@@ -30,6 +33,9 @@
   --accent-hover: #b4d6cc;
   --danger-color: #ff9090;
   --success-color: #7ddca8;
+  --warning-bg: rgba(251, 191, 36, 0.12);
+  --warning-fg: #fbbf24;
+  --warning-border: rgba(251, 191, 36, 0.3);
 }
 
 /* System-preference dark when the user hasn't explicitly chosen a theme. */
@@ -47,6 +53,9 @@
     --accent-hover: #b4d6cc;
     --danger-color: #ff9090;
     --success-color: #7ddca8;
+    --warning-bg: rgba(251, 191, 36, 0.12);
+    --warning-fg: #fbbf24;
+    --warning-border: rgba(251, 191, 36, 0.3);
   }
 }
 
@@ -162,6 +171,14 @@ textarea.input {
   background-color: var(--surface-color);
   border-color: var(--text-secondary);
   box-shadow: 0 0 0 4px rgba(151, 193, 181, 0.25);
+}
+
+/* Keyboard focus indicator. Most controls override backgrounds inline, so a
+   single global outline keeps focus visible everywhere without per-control
+   styles. Only applies to keyboard focus (:focus-visible), never taps. */
+:focus-visible {
+  outline: 2px solid var(--accent-hover);
+  outline-offset: 2px;
 }
 
 /* Buttons */

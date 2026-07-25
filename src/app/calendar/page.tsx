@@ -80,7 +80,12 @@ export default function CalendarPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
+  // Monotonic sequence so a slow, superseded fetch can never clobber the
+  // month the user is currently viewing (rapid next/next taps race otherwise).
+  const fetchSeq = useRef(0);
+
   const fetchGoogleEvents = useCallback(async () => {
+    const seq = ++fetchSeq.current;
     if (entries.length === 0) {
       setGoogleEvents([]);
       setCalendarStatuses([]);
@@ -111,13 +116,15 @@ export default function CalendarPage() {
       const json = (await res.json()) as {
         events?: GoogleEvent[]; calendars?: CalendarStatus[]; error?: string;
       };
+      if (seq !== fetchSeq.current) return; // superseded by a newer fetch
       if (!res.ok) throw new Error(json.error || `Request failed (${res.status})`);
       setGoogleEvents(json.events || []);
       setCalendarStatuses(json.calendars || []);
     } catch (err) {
+      if (seq !== fetchSeq.current) return;
       setGoogleFetchError(err instanceof Error ? err.message : 'Failed to load Google events');
     } finally {
-      setGoogleFetching(false);
+      if (seq === fetchSeq.current) setGoogleFetching(false);
     }
   }, [entries, cursor, today]);
 

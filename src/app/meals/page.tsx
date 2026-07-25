@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { LIMITS, capLen } from '@/lib/limits';
 import Fab from '@/components/Fab';
 import PageHeader from '@/components/PageHeader';
+import { useUndoDelete } from '@/components/UndoSnackbar';
 import { MEAL_SLOTS, type MealItem, type RecipeItem } from './_components/constants';
 import WeekNavigator from './_components/WeekNavigator';
 import DayCard from './_components/DayCard';
@@ -44,6 +45,7 @@ export default function MealsPage() {
   const [mealNote, setMealNote] = useState('');
   const [loading, setLoading] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const { offerUndo, snackbar } = useUndoDelete();
 
   const loadData = useCallback(async () => {
     const { data: userData } = await supabase.auth.getUser();
@@ -208,10 +210,18 @@ export default function MealsPage() {
   };
 
   const removeMeal = async (id: string) => {
+    const meal = meals.find(m => m.id === id);
+    if (!meal) return;
+    const label = (meal.body?.recipeId && recipeById.get(meal.body.recipeId)?.title)
+      || meal.body?.customName
+      || 'Meal';
     const prevMeals = meals;
     setMeals(meals.filter(m => m.id !== id));
     const { error } = await supabase.from('items').delete().eq('id', id);
-    if (error) setMeals(prevMeals);
+    if (error) { setMeals(prevMeals); return; }
+    offerUndo(label, meal as unknown as Record<string, unknown>, () => {
+      setMeals(prev => (prev.some(m => m.id === meal.id) ? prev : [...prev, meal]));
+    });
   };
 
   const openAddForToday = () => {
@@ -248,6 +258,7 @@ export default function MealsPage() {
         ) : undefined}
       />
 
+      {snackbar}
       <WeekNavigator
         weekQualifier={weekQualifier}
         weekRangeLabel={weekRangeLabel}

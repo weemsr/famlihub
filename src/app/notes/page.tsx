@@ -1,11 +1,12 @@
 "use client";
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Plus, Trash2, ChevronDown, ChevronUp, Edit2, StickyNote } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
 import { LIMITS, capLen } from '@/lib/limits';
 import Fab from '@/components/Fab';
 import PageHeader from '@/components/PageHeader';
 import { useUndoDelete } from '@/components/UndoSnackbar';
+import PasteButton from '@/components/PasteButton';
 
 interface NoteItem {
   id: string;
@@ -24,7 +25,34 @@ export default function NotesPage() {
   const [editTitle, setEditTitle] = useState('');
   const [editBody, setEditBody] = useState('');
   const [loaded, setLoaded] = useState(false);
+  const bodyRef = useRef<HTMLTextAreaElement | null>(null);
+  const editBodyRef = useRef<HTMLTextAreaElement | null>(null);
   const { offerUndo, snackbar } = useUndoDelete();
+
+  /**
+   * Insert clipboard text at the caret (or replace the selection), matching
+   * what a normal paste does, instead of clobbering whatever is already
+   * written. Falls back to appending when the field isn't focused.
+   */
+  const insertAtCaret = (
+    ref: React.RefObject<HTMLTextAreaElement | null>,
+    current: string,
+    text: string,
+    setValue: (v: string) => void,
+  ) => {
+    const el = ref.current;
+    if (!el) { setValue(current ? `${current}\n${text}` : text); return; }
+    const start = el.selectionStart ?? current.length;
+    const end = el.selectionEnd ?? current.length;
+    const next = current.slice(0, start) + text + current.slice(end);
+    setValue(next);
+    // Restore the caret after React re-renders with the new value.
+    requestAnimationFrame(() => {
+      el.focus();
+      const caret = start + text.length;
+      el.setSelectionRange(caret, caret);
+    });
+  };
 
   // Fetch is separated from state application (applied in a .then callback)
   // for react-hooks/set-state-in-effect compliance; memoized so the mount
@@ -135,7 +163,11 @@ export default function NotesPage() {
             onChange={e => setTitle(e.target.value)}
             maxLength={LIMITS.title}
           />
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+            <PasteButton onPaste={text => insertAtCaret(bodyRef, body, text, setBody)} />
+          </div>
           <textarea
+            ref={bodyRef}
             className="input mb-4"
             placeholder="Write your note here..."
             style={{ height: 250, resize: 'none' }}
@@ -172,7 +204,11 @@ export default function NotesPage() {
                 onChange={e => setEditTitle(e.target.value)}
                 maxLength={LIMITS.title}
               />
+              <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}>
+                <PasteButton onPaste={text => insertAtCaret(editBodyRef, editBody, text, setEditBody)} />
+              </div>
               <textarea
+                ref={editBodyRef}
                 className="input mb-4"
                 placeholder="Write your note here..."
                 style={{ height: 250, resize: 'none' }}

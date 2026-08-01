@@ -1,5 +1,6 @@
 "use client";
 import { Save } from 'lucide-react';
+import PasteButton from '@/components/PasteButton';
 
 export type CreationMode = 'link' | 'manual';
 
@@ -79,19 +80,7 @@ export default function RecipeImporter({
                 onChange={e => setUrl(e.target.value)}
                 disabled={loading}
               />
-              <button
-                className="btn btn-secondary"
-                style={{ padding: '0 16px', width: 'auto', fontSize: '13px' }}
-                onClick={async () => {
-                  try {
-                    const text = await navigator.clipboard.readText();
-                    setUrl(text);
-                  } catch (err) { console.error('Clipboard error', err); }
-                }}
-                disabled={loading}
-              >
-                Paste 📋
-              </button>
+              <PasteButton onPaste={text => setUrl(text.trim())} disabled={loading} />
               <button className="btn" style={{ padding: '0 24px', width: 'auto' }} onClick={onImport} disabled={loading || !url}>
                 {loading ? '...' : <Save size={20} />}
               </button>

@@ -5,6 +5,7 @@ import { safeImageUrl, safeHttpUrl } from '@/lib/url';
 import { parseRecipeYield } from '@/lib/recipe-scale';
 import { asStringArray } from '@/lib/types';
 import { LIMITS, capLen } from '@/lib/limits';
+import { harvestIngredientLists } from '@/lib/recipe-extract';
 
 /**
  * Normalize a scraped list into bounded string lines. The extraction paths
@@ -481,17 +482,10 @@ export async function fetchRecipeFromUrl(url: string) {
       });
     }
 
-    // 3. DEEP NLP Heuristic Fallback (e.g. foodiefiber using generic dynamic blocks)
+    // 3. Heuristic fallback for pages with no structured recipe data at all
+    //    (e.g. foodiefiber, which publishes only schema.org Article).
     if (ingredients.length === 0) {
-      $('ul, ol').each((_, el) => {
-        const lis = $(el).find('> li');
-        if (lis.length > 2 && ingredients.length === 0) {
-          const sampleMatch = $(el).text().toLowerCase();
-          if (/\b(cup|tablespoon|teaspoon|tbsp|tsp|oz|ounce|pound|lb|clove|pinch|gram|ml)s?\b/.test(sampleMatch)) {
-            lis.each((_, li) => { ingredients.push($(li).text().replace(/\s+/g, ' ').trim()); });
-          }
-        }
-      });
+      ingredients = harvestIngredientLists($);
     }
 
     if (instructions.length === 0 && ingredients.length > 0) {

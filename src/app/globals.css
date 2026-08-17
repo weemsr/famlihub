@@ -86,7 +86,9 @@ body {
   color: var(--text-primary);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
-  padding-bottom: var(--nav-height); /* Space for bottom nav */
+  /* Clears the bottom nav, which is itself nav-height plus the home-indicator
+     inset on iPhones. */
+  padding-bottom: calc(var(--nav-height) + env(safe-area-inset-bottom));
 }
 
 a {
@@ -121,6 +123,10 @@ h3 {
   max-width: 800px;
   margin: 0 auto;
   min-height: 100vh;
+  /* iOS Safari resolves 100vh against the *large* viewport (toolbars hidden),
+     so a short page still scrolled and the address bar jittered. dvh tracks
+     what is actually visible; the 100vh above stays as the fallback. */
+  min-height: 100dvh;
 }
 
 /* Beautiful surface cards */
@@ -222,7 +228,10 @@ textarea.input {
   bottom: 0;
   left: 0;
   right: 0;
-  height: var(--nav-height);
+  /* box-sizing is border-box globally, so folding the safe-area inset into
+     padding alone left only ~46px of usable height on a home-indicator iPhone
+     and squeezed the icons. Grow the box instead. */
+  height: calc(var(--nav-height) + env(safe-area-inset-bottom));
   background-color: color-mix(in srgb, var(--surface-color) 90%, transparent);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
@@ -249,10 +258,13 @@ textarea.input {
   align-items: center;
   justify-content: center;
   color: var(--text-secondary);
-  font-size: 0.8rem;
+  font-size: 0.72rem;
   font-weight: 600;
   flex-shrink: 0;
-  min-width: 68px;
+  /* Ten destinations never fit a phone at 68px; 60px keeps the tap target
+     comfortably over 44px while showing ~2 more tabs per screen. The nav still
+     scrolls — BottomNav scrolls the active tab into view on navigation. */
+  min-width: 60px;
   height: 100%;
   transition: color 0.2s ease;
   padding-top: 8px;

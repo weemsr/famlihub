@@ -20,7 +20,7 @@ and [Supabase](https://supabase.com) (Postgres + Auth + Realtime).
 
 ```bash
 git clone <this-repo>
-cd Antigravity
+cd famlihub
 npm install
 cp .env.example .env.local   # then fill in the values below
 npm run dev
@@ -28,24 +28,26 @@ npm run dev
 
 The app runs at [http://localhost:3000](http://localhost:3000).
 
+`npm run dev` tolerates missing Supabase env vars so the app still renders while
+you fill in `.env.local`. `npm run build` does not — it runs as
+`NODE_ENV=production`, where a missing URL or key is a deploy-time
+misconfiguration and fails the build (surfacing as a prerender error on
+`/calendar`). Set the two `NEXT_PUBLIC_*` values before building.
+
 ## Environment
 
 | Variable                        | Visibility  | Description                                                   |
 | ------------------------------- | ----------- | ------------------------------------------------------------- |
 | `NEXT_PUBLIC_SUPABASE_URL`      | client      | Supabase project URL (Project Settings → API).                |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | client      | Supabase publishable/anon key.                                |
-| `SUPABASE_SERVICE_ROLE_KEY`     | server-only | Service-role JWT. Used by the ICS feed route.                 |
-| `CALENDAR_SIGNING_SECRET`       | server-only | HMAC secret for per-user calendar-feed URLs (32+ bytes).      |
+| `SUPABASE_SERVICE_ROLE_KEY`     | server-only | Service-role JWT. Verifies caller JWTs and reads rows in the API routes. |
+| `CALENDAR_SIGNING_SECRET`       | server-only | HMAC secret for per-user calendar-feed URLs (32+ bytes). Only needed if you use the ICS feed — see below. |
 
 Generate a `CALENDAR_SIGNING_SECRET` with:
 
 ```bash
 node -e "console.log(require('crypto').randomBytes(48).toString('base64url'))"
 ```
-
-**Rotating `CALENDAR_SIGNING_SECRET` invalidates every previously issued feed
-URL** — use this if a URL leaks. Users will need to re-paste their URL into
-Google Calendar after a rotation.
 
 ## Database
 
@@ -56,19 +58,36 @@ use.
 
 Each signed-in user only sees their own rows (`auth.uid() = user_id`).
 
-## Google Calendar sync
+`schema.sql` is safe to re-run — every statement is guarded and none of them
+delete or rewrite rows. **Existing installs should re-run it**: it now adds
+`items` to the `supabase_realtime` publication, which every page's live-update
+subscription depends on. Without that the subscriptions connect, report success,
+and never fire, so edits made on one device don't appear on another until a
+manual reload.
 
-Two independent paths, neither requires Google Cloud Console:
+## Google Calendar
 
-1. **ICS subscription (set-and-forget).** The Calendar tab shows a "Sync with
-   Google Calendar" card with a personal feed URL:
-   `https://famlihub.vercel.app/api/calendar/<token>.ics`. Paste it into
-   Google Calendar → *Other calendars* → *+* → *From URL*. Google refreshes
-   the feed on its own schedule (often every several hours).
+**What's wired up today: reading Google into FamLi.** The Calendar tab's
+"Connected calendars" panel takes one or more Google *secret iCal* URLs
+(Google Calendar → calendar settings → *Integrate calendar* → *Secret address
+in iCal format*). Each gets its own label and colour, and the server fetches and
+merges them into the month/day/agenda views. No Google Cloud Console needed.
 
-2. **Per-meal quick add.** Each scheduled meal has a Google Calendar icon
-   button that opens a pre-filled event in Google Calendar — one click to
-   confirm.
+### Pushing FamLi meals out to Google — built, but not reachable from the UI
+
+The server side exists and is tested: `/api/calendar-feed-url` mints a personal
+HMAC-signed URL, and `/api/calendar/<token>.ics` serves your meal plan as an ICS
+feed that Google can subscribe to. What's missing is the UI — no screen calls
+`/api/calendar-feed-url`, so there's no way to obtain your token from inside the
+app.
+
+Until that card is built, this half of the feature is dormant. `CALENDAR_SIGNING_SECRET`
+is only needed if you wire it up (or call the endpoint by hand with your Supabase
+JWT). The same goes for `src/lib/gcal-link.ts`, which builds "add this meal to
+Google Calendar" links but is not imported anywhere.
+
+**Rotating `CALENDAR_SIGNING_SECRET` invalidates every previously issued feed
+URL** — use this if a URL leaks.
 
 ## Theming
 
@@ -85,8 +104,13 @@ Via Vercel CLI:
 npx vercel --prod
 ```
 
-Make sure the four env vars above are set in the Vercel project (`vercel env
-add`).
+Make sure the env vars above are set in the Vercel project (`vercel env add`).
+`CALENDAR_SIGNING_SECRET` is optional while the ICS feed has no UI.
+
+If the Vercel project is connected to this repo on GitHub, pushes to `main`
+deploy to production and pushes to any other branch produce a preview URL only.
+Nothing in this repo triggers a deploy on its own — `.github/workflows/ci.yml`
+just runs lint, tests, and a build.
 
 Production: [famlihub.vercel.app](https://famlihub.vercel.app)
 
@@ -97,11 +121,15 @@ src/
   app/
     actions/recipe.ts         # Server action: fetch + parse recipe URLs
     api/
-      calendar/[token]/        # ICS feed for a signed user token
-      calendar-feed-url/       # Returns the signed feed URL for the caller
-    calendar/                  # Month grid + upcoming meals + sync card
+      calendar/[token]/        # ICS feed for a signed user token (no UI yet)
+      calendar-feed-url/       # Returns the signed feed URL (no UI yet)
+      google-calendar/events/  # Fetches + merges connected Google iCal feeds
+      pantry-scan/             # Vision-model shelf scanning (optional providers)
+    calendar/                  # Month / day / agenda + connected-calendar panel
+    credit-cards/              # Annual-fee cancel-by tracker
     groceries/                 # Regular / Costco / Asian lists
-    inventory/                 # Pantry staples
+    inventory/                 # Pantry staples, CSV import, photo scan
+    maintenance/               # Recurring home/car upkeep
     meals/                     # Weekly planner, 3 slots × 7 days
     notes/                     # Whiteboard notes
     recipes/                   # URL import, manual create, search
@@ -110,20 +138,29 @@ src/
   components/
     AuthProvider.tsx           # Email/password sign-in gate
     BottomNav.tsx              # Mobile-first bottom nav
+    RecipeDisplay.tsx          # Shared recipe body (scaler + ingredients)
     ThemeToggle.tsx            # Light / Auto / Dark segmented control
+    useDialog.ts               # Focus trap + scroll lock for bottom sheets
+    useToday.ts                # Local-midnight date that rolls over
   lib/
     supabase.ts                # Client-safe Supabase singleton (anon)
     supabase-admin.ts          # Server-only service-role client
-    types.ts                   # Shared Item/body interfaces
+    types.ts                   # Shared Item/body interfaces + coercion helpers
     url.ts                     # URL safety helpers (image + link)
+    html.ts                    # Tag stripping for scraped recipe text
+    limits.ts                  # Length caps applied at every write path
+    csv.ts                     # RFC 4180 reader (keeps original line numbers)
     ics.ts                     # RFC 5545 ICS generator for meals
-    gcal-link.ts               # Google Calendar "create event" URL builder
+    gcal-link.ts               # Google Calendar "create event" URL builder (unused)
     calendar-token.ts          # HMAC-signed per-user feed tokens
 ```
 
 ## Notes on PWA
 
 The app has a web app manifest and iOS meta tags for "Add to Home Screen"
-(standalone launch, theme-matched status bar). A service worker for offline
-read of recipes is flagged as a future upgrade — Next.js 16 + Turbopack
-integration is currently best handled as a dedicated pass.
+(standalone launch, theme-matched status bar). Icons are square PNGs generated
+from the masthead (`icon-192`, `icon-512`, a padded `icon-maskable-512` for
+Android's shape masking, and a 180px `apple-touch-icon`); regenerate them from
+`logo3.png` with `sharp` if the logo changes. A service worker for offline read
+of recipes is flagged as a future upgrade — Next.js 16 + Turbopack integration
+is currently best handled as a dedicated pass.

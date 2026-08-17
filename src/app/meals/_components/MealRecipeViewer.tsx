@@ -10,7 +10,8 @@ import type { RecipeItem } from './constants';
  * Bottom-sheet viewer for the recipe assigned to a planned meal. Reuses the
  * shared <RecipeDisplay> so it matches the Recipes tab exactly, and the
  * global `.bottom-sheet-*` classes so it matches the add-meal modal.
- * View-only: the per-ingredient grocery affordance stays off.
+ * The meal itself isn't editable here, but the per-ingredient "add to grocery
+ * list" affordance is on — planning a meal is exactly when you want it.
  */
 export default function MealRecipeViewer({
   recipe,

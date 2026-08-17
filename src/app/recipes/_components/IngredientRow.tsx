@@ -2,6 +2,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { supabase } from '@/lib/supabase';
 import { scaleIngredient } from '@/lib/recipe-scale';
+import { stripHtml } from '@/lib/html';
 import { LIMITS, capLen } from '@/lib/limits';
 import { groceryOrderStamp } from '@/lib/types';
 
@@ -22,7 +23,7 @@ export default function IngredientRow({ ing, scaleFactor = 1, showAddToGrocery =
   // rescaled) so we never setState on an unmounted component.
   useEffect(() => () => { if (resetTimer.current) clearTimeout(resetTimer.current); }, []);
 
-  const cleanText = ing.replace(/<[^>]*>?/gm, '');
+  const cleanText = stripHtml(ing);
   const displayText = scaleFactor !== 1 ? scaleIngredient(cleanText, scaleFactor) : cleanText;
 
   const addToGrocery = async (store: 'regular' | 'costco' | 'asian') => {

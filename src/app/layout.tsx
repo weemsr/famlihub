@@ -12,9 +12,15 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'FamLi Hub',
   },
+  // Square icons — the masthead logo is a 1024x338 banner, so using it here
+  // gave iOS a letterboxed home-screen tile and made Chrome reject the install
+  // prompt for not matching its declared sizes.
   icons: {
-    icon: '/logo3.png',
-    apple: '/logo3.png',
+    icon: [
+      { url: '/icon-192.png', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: [{ url: '/apple-touch-icon.png', sizes: '180x180', type: 'image/png' }],
   },
 };
 

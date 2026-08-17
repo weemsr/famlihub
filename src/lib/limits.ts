@@ -9,6 +9,10 @@ export const LIMITS = {
   note: 2000,
   body: 5000,
   line: 500,
+  /** Max entries in a scraped ingredient/instruction list. The DOM-scraping
+   *  fallbacks can sweep up every <li> on an unconventional page, so the count
+   *  needs a ceiling as well as the line length. */
+  list: 250,
 } as const;
 
 export function capLen(value: string, max: number): string {

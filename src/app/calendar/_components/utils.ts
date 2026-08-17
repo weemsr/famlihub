@@ -1,4 +1,9 @@
-import { CALENDAR_COLOR_PALETTE, CALENDAR_DEFAULT_COLOR, type GoogleCalendarEntry } from '@/lib/types';
+import {
+  CALENDAR_COLOR_PALETTE,
+  CALENDAR_DEFAULT_COLOR,
+  calendarEntryFallbackId,
+  type GoogleCalendarEntry,
+} from '@/lib/types';
 
 export interface GoogleEvent {
   uid: string;
@@ -87,7 +92,9 @@ export function entriesFromSetting(setting: SettingRow | null): GoogleCalendarEn
       const e = r as Partial<GoogleCalendarEntry>;
       if (typeof e.url !== 'string' || !e.url) continue;
       out.push({
-        id: typeof e.id === 'string' && e.id ? e.id : newEntryId(),
+        // Deterministic fallback: this runs inside a useMemo, so a random id
+        // would also churn React keys on every recompute.
+        id: typeof e.id === 'string' && e.id ? e.id : calendarEntryFallbackId(e.url),
         name: typeof e.name === 'string' && e.name ? e.name : 'Google Calendar',
         url: e.url,
         color: typeof e.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(e.color) ? e.color : CALENDAR_DEFAULT_COLOR,

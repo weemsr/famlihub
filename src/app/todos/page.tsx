@@ -144,9 +144,14 @@ export default function TodosPage() {
   const saveEdit = async (id: string) => {
     if (!editTitle.trim()) return;
     const title = capLen(editTitle.trim(), LIMITS.title);
+    const prevItems = items;
     setItems(items.map(i => i.id === id ? { ...i, title } : i));
     setEditingId(null);
-    await supabase.from('items').update({ title }).eq('id', id);
+    // Matches the revert-on-failure the other handlers here already do; this
+    // one used to ignore the error, so a failed rename looked like it worked
+    // until the next refetch quietly put the old title back.
+    const { error } = await supabase.from('items').update({ title }).eq('id', id);
+    if (error) setItems(prevItems);
   };
 
   const activeItems = items.filter(i => !i.is_completed);

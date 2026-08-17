@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 import Fab from '@/components/Fab';
+import { useToday } from '@/components/useToday';
 import type { MaintenanceBody, MaintenanceItem } from '@/lib/types';
 import { MAINTENANCE_SEEDS } from './seed';
 import QuickStart from './_components/QuickStart';
@@ -26,7 +27,7 @@ const FILTERS: { id: MaintFilter; label: string }[] = [
 ];
 
 export default function MaintenancePage() {
-  const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
+  const today = useToday();
   const todayIso = isoDay(today);
 
   const [items, setItems] = useState<MaintenanceItem[]>([]);

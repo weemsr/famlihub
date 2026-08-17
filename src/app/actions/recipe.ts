@@ -3,6 +3,20 @@ import * as cheerio from 'cheerio';
 import { promises as dns } from 'node:dns';
 import { safeImageUrl, safeHttpUrl } from '@/lib/url';
 import { parseRecipeYield } from '@/lib/recipe-scale';
+import { asStringArray } from '@/lib/types';
+import { LIMITS, capLen } from '@/lib/limits';
+
+/**
+ * Normalize a scraped list into bounded string lines. The extraction paths
+ * below hand back whatever the page had — objects, nested arrays, thousands of
+ * swept-up <li> nodes — so this is the boundary where it becomes storable.
+ */
+function toSafeLines(value: unknown): string[] {
+  return asStringArray(value)
+    .slice(0, LIMITS.list)
+    .map(line => capLen(line.trim(), LIMITS.line))
+    .filter(Boolean);
+}
 
 // Narrow types for the shapes we read out of scraped JSON. The scraper
 // traverses untyped JSON-LD / Next.js data, so we keep these loose but
@@ -511,7 +525,28 @@ export async function fetchRecipeFromUrl(url: string) {
     const safeImage = safeImageUrl(image) || '';
     const safeSource = safeHttpUrl(url) || '';
 
-    return { success: true, recipe: { title, ingredients, instructions, image: safeImage, sourceUrl: safeSource, servings } };
+    // Bound everything before it leaves the server. `ingredients` and
+    // `instructions` are assigned from untyped scraped JSON above, so they can
+    // hold objects or unbounded runs of swept-up DOM text.
+    const safeTitle = capLen(title.trim(), LIMITS.title) || 'Untitled Recipe';
+    const safeIngredients = toSafeLines(ingredients);
+    const safeInstructions = toSafeLines(instructions);
+
+    if (safeIngredients.length === 0 && safeInstructions.length === 0) {
+      throw new Error("Could not extract ingredients. The site might be using an unconventional layout or blocking automated analysis.");
+    }
+
+    return {
+      success: true,
+      recipe: {
+        title: safeTitle,
+        ingredients: safeIngredients,
+        instructions: safeInstructions,
+        image: safeImage,
+        sourceUrl: safeSource,
+        servings,
+      },
+    };
 
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Failed to import recipe.';

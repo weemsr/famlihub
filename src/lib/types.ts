@@ -112,6 +112,23 @@ export const CALENDAR_COLOR_PALETTE: readonly string[] = [
 
 export const CALENDAR_DEFAULT_COLOR = CALENDAR_COLOR_PALETTE[0];
 
+/**
+ * Stable fallback id for a stored calendar entry that has no `id` of its own.
+ *
+ * Derived from the URL so the browser and the events route agree. They used to
+ * mint independent random ids, so the per-calendar status the server returned
+ * could never be matched back to a row — the UI silently showed "0 events" and
+ * swallowed any error for that calendar.
+ */
+export function calendarEntryFallbackId(url: string): string {
+  let hash = 2166136261; // FNV-1a
+  for (let i = 0; i < url.length; i++) {
+    hash ^= url.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  return `cal_${(hash >>> 0).toString(36)}`;
+}
+
 export interface Item<TBody = unknown> {
   id: string;
   type: string;
@@ -138,12 +155,53 @@ export type CreditCardItem = Item<CreditCardBody> & { title: string };
  */
 export const groceryOrderStamp = () => Date.now();
 
+/** Keys that carry the display text on the object-shaped entries scrapers emit
+ *  (schema.org HowToStep `{text}`, Sanity `{item}`, assorted `{name}`). */
+const TEXT_KEYS = ['text', 'name', 'item', 'ingredient', 'description'] as const;
+
 /**
- * Coerce an unknown value to a string[]. Handles the common scraped shapes:
- * array of strings, single string, or anything else → [].
+ * Coerce an unknown value to a string[]. Handles the shapes that actually come
+ * back from scraped pages: array of strings, array of objects carrying the text
+ * under a known key, a single string, or anything else → [].
+ *
+ * Object entries are recovered rather than dropped. Silently discarding them
+ * made an imported recipe render as "No ingredients listed" *and* open the
+ * editor with empty boxes — so saving replaced the real ingredients with [].
  */
 export function asStringArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.filter((v): v is string => typeof v === 'string');
-  if (typeof value === 'string') return [value];
-  return [];
+  if (typeof value === 'string') return value.trim() ? [value] : [];
+  if (!Array.isArray(value)) return [];
+
+  const out: string[] = [];
+  for (const entry of value) {
+    if (typeof entry === 'string') {
+      if (entry.trim()) out.push(entry);
+      continue;
+    }
+    if (typeof entry === 'number' && Number.isFinite(entry)) {
+      out.push(String(entry));
+      continue;
+    }
+    if (entry && typeof entry === 'object') {
+      const obj = entry as Record<string, unknown>;
+      for (const key of TEXT_KEYS) {
+        const candidate = obj[key];
+        if (typeof candidate === 'string' && candidate.trim()) {
+          out.push(candidate);
+          break;
+        }
+      }
+    }
+  }
+  return out;
+}
+
+/**
+ * Did this stored value ever hold content? Used by the recipe editor to tell
+ * "the user cleared this on purpose" apart from "we failed to read the stored
+ * shape", so a save can never blank out a recipe that still has data.
+ */
+export function hadStoredContent(value: unknown): boolean {
+  if (typeof value === 'string') return value.trim().length > 0;
+  return Array.isArray(value) && value.length > 0;
 }

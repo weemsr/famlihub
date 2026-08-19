@@ -108,6 +108,9 @@ export default function RecipeDisplay({
                   borderRadius: 999,
                   cursor: 'pointer',
                   transition: 'background 120ms ease, color 120ms ease',
+                  // Removes the 300ms tap delay and double-tap-to-zoom, so a
+                  // quick series of scale changes registers every time.
+                  touchAction: 'manipulation',
                   minWidth: mode === 'custom' ? 72 : 52,
                 }}
               >

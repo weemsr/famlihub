@@ -136,11 +136,24 @@ h3 {
   padding: 20px;
   box-shadow: 0 4px 14px 0 var(--hairline); /* Softer, lighter shadow */
   margin-bottom: 16px;
-  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+  transition: box-shadow 0.2s ease;
   border: 1px solid var(--hairline); /* Subtle definition */
 }
 
-.card:active {
+/* Press feedback belongs only to cards you can actually press. Applied to every
+   .card, this scale transform moved the whole container under the user's
+   finger: displacement grows with distance from the card's centre, so a button
+   near the top of a tall recipe card slid ~13px — half its own height —
+   animated over 0.2s, which made the ingredient scaler hard to hit. Two of the
+   ~22 cards in the app are interactive (the home dashboard tiles, which are
+   links), and those are small enough for the effect to read as a press. */
+a.card,
+button.card {
+  transition: transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s ease;
+}
+
+a.card:active,
+button.card:active {
   transform: scale(0.98);
 }
 

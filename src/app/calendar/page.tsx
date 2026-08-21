@@ -6,6 +6,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { type GoogleCalendarEntry } from '@/lib/types';
 import PageHeader from '@/components/PageHeader';
+import { useToday } from '@/components/useToday';
 import EventRow from './_components/EventRow';
 import UpcomingList from './_components/UpcomingList';
 import MonthGrid from './_components/MonthGrid';
@@ -24,7 +25,7 @@ import {
 } from './_components/utils';
 
 export default function CalendarPage() {
-  const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
+  const today = useToday();
   const todayIso = isoDay(today);
 
   const [viewMode, setViewMode] = useState<ViewMode>('month');

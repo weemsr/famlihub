@@ -6,18 +6,12 @@ import { LIMITS, capLen } from '@/lib/limits';
 import Fab from '@/components/Fab';
 import PageHeader from '@/components/PageHeader';
 import { useUndoDelete } from '@/components/UndoSnackbar';
+import { useToday } from '@/components/useToday';
 import { MEAL_SLOTS, type MealItem, type RecipeItem } from './_components/constants';
 import WeekNavigator from './_components/WeekNavigator';
 import DayCard from './_components/DayCard';
 import MealModal from './_components/MealModal';
 import MealRecipeViewer from './_components/MealRecipeViewer';
-
-// Local-midnight timestamp for "today". Used to detect midnight rollover so the
-// week view always shows the correct Monday–Sunday window.
-const getTodayKey = () => {
-  const d = new Date();
-  return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
-};
 
 function dayLabelFor(iso: string): string {
   const [y, m, d] = iso.split('-').map(Number);
@@ -32,7 +26,9 @@ export default function MealsPage() {
   const [meals, setMeals] = useState<MealItem[]>([]);
   const [recipes, setRecipes] = useState<RecipeItem[]>([]);
   const [weekOffset, setWeekOffset] = useState<number>(0);
-  const [todayKey, setTodayKey] = useState(getTodayKey);
+  // Rolls over at midnight, so the Monday–Sunday window stays correct on a tab
+  // that's been open since yesterday.
+  const today = useToday();
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [viewMeal, setViewMeal] = useState<{ meal: MealItem; recipe: RecipeItem; slotId: string } | null>(null);
@@ -75,21 +71,6 @@ export default function MealsPage() {
     return () => { supabase.removeChannel(channel); };
   }, []);
 
-  useEffect(() => {
-    const refresh = () => {
-      const next = getTodayKey();
-      setTodayKey(prev => (prev === next ? prev : next));
-    };
-    const interval = window.setInterval(refresh, 60 * 1000);
-    window.addEventListener('visibilitychange', refresh);
-    window.addEventListener('focus', refresh);
-    return () => {
-      window.clearInterval(interval);
-      window.removeEventListener('visibilitychange', refresh);
-      window.removeEventListener('focus', refresh);
-    };
-  }, []);
-
   const mealsBySlot = useMemo(() => {
     const m = new Map<string, MealItem[]>();
     const sorted = [...meals].sort((a, b) => {
@@ -116,8 +97,7 @@ export default function MealsPage() {
   }, [recipes]);
 
   const currentWeek = useMemo(() => {
-    const anchor = new Date();
-    anchor.setHours(0, 0, 0, 0);
+    const anchor = today;
     const todayIso = `${anchor.getFullYear()}-${String(anchor.getMonth() + 1).padStart(2, '0')}-${String(anchor.getDate()).padStart(2, '0')}`;
 
     const jsDay = anchor.getDay();
@@ -140,9 +120,7 @@ export default function MealsPage() {
         isToday: dbKey === todayIso,
       };
     });
-    // todayKey keeps the memo fresh across midnight.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekOffset, todayKey]);
+  }, [weekOffset, today]);
 
   const weekRangeLabel = useMemo(() => {
     if (currentWeek.length < 7) return '';

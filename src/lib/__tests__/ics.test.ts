@@ -57,4 +57,25 @@ describe('mealsToIcs', () => {
     expect(summaryChunk!.length).toBeLessThanOrEqual(75);
     expect(ics).toContain('\r\n '); // folded continuation
   });
+
+  it('folds by octets, not JS string length', () => {
+    // Regression: every SUMMARY leads with an emoji, so a 75-character line
+    // could be 80+ octets — over the RFC 5545 limit.
+    const name = 'Bœuf bourguignon aux légumes rôtis 🍲🥘🍛 with a very long trailing description';
+    const ics = mealsToIcs([meal({ body: { day: '2026-07-20', mealId: 'Dinner', customName: name } })], []);
+    const lines = ics.split('\r\n');
+    for (const line of lines) {
+      expect(Buffer.byteLength(line, 'utf8')).toBeLessThanOrEqual(75);
+    }
+  });
+
+  it('never splits a surrogate pair or an escape sequence', () => {
+    const name = '🍲'.repeat(40) + ', and ; more';
+    const ics = mealsToIcs([meal({ body: { day: '2026-07-20', mealId: 'Dinner', customName: name } })], []);
+    // A lone surrogate would mean a multi-byte character was cut in half.
+    expect(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/.test(ics)).toBe(false);
+    // Unfolding must restore the escaped punctuation intact.
+    const unfolded = ics.replace(/\r\n /g, '');
+    expect(unfolded).toContain('\\, and \\; more');
+  });
 });

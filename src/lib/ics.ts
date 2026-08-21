@@ -37,19 +37,50 @@ function escapeIcs(text: string): string {
     .replace(/;/g, '\\;');
 }
 
-/** Fold a content line to <=75 octets per RFC 5545 §3.1. */
+const utf8 = new TextEncoder();
+
+/**
+ * Fold a content line to <=75 octets per RFC 5545 §3.1.
+ *
+ * Counted in UTF-8 octets, not JS string length. Every meal SUMMARY leads with
+ * an emoji, so a 75-character line is routinely well over 75 octets — the old
+ * `slice(0, 75)` both broke the limit and could cut a surrogate pair in half,
+ * emitting invalid UTF-8. Splitting happens between "atoms": an escaped pair
+ * (`\,`, `\n`) or a single code point, so neither is ever severed.
+ */
 function fold(line: string): string {
-  if (line.length <= 75) return line;
-  const out: string[] = [];
-  let remaining = line;
-  let first = true;
-  while (remaining.length > 0) {
-    const take = first ? 75 : 74;
-    out.push((first ? '' : ' ') + remaining.slice(0, take));
-    remaining = remaining.slice(take);
-    first = false;
+  if (utf8.encode(line).length <= 75) return line;
+
+  const atoms: string[] = [];
+  const chars = Array.from(line); // code points, not UTF-16 units
+  for (let i = 0; i < chars.length; i++) {
+    if (chars[i] === '\\' && i + 1 < chars.length) {
+      atoms.push(chars[i] + chars[i + 1]);
+      i++;
+    } else {
+      atoms.push(chars[i]);
+    }
   }
-  return out.join('\r\n');
+
+  const segments: string[] = [];
+  let current = '';
+  let octets = 0;
+  let budget = 75; // continuation lines give up one octet to the leading space
+
+  for (const atom of atoms) {
+    const size = utf8.encode(atom).length;
+    if (octets > 0 && octets + size > budget) {
+      segments.push(current);
+      current = '';
+      octets = 0;
+      budget = 74;
+    }
+    current += atom;
+    octets += size;
+  }
+  if (current) segments.push(current);
+
+  return segments.map((seg, i) => (i === 0 ? seg : ' ' + seg)).join('\r\n');
 }
 
 /** Build YYYYMMDD from a 'YYYY-MM-DD' day string. */

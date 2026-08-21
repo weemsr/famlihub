@@ -16,6 +16,44 @@ export const dynamic = 'force-dynamic';
 const MAX_IMAGE_BYTES = 4 * 1024 * 1024;
 const PROVIDER_TIMEOUT_MS = 45000;
 
+// This is the only route that spends money per call, and it fans out one
+// upstream request per configured provider. A 20-photo batch is 20 POSTs, so
+// the ceiling has to clear a legitimate batch while still stopping a runaway
+// loop. Per-instance and best-effort — same caveat as any in-memory state on
+// serverless — but it turns "unbounded" into "bounded per warm instance".
+const RATE_WINDOW_MS = 5 * 60 * 1000;
+const RATE_MAX_REQUESTS = 60;
+const RATE_MAX_TRACKED_USERS = 5000;
+const recentScans = new Map<string, number[]>();
+
+/** Returns true when the caller is over budget for the current window. */
+function isRateLimited(userId: string): boolean {
+  const now = Date.now();
+  const cutoff = now - RATE_WINDOW_MS;
+
+  const hits = (recentScans.get(userId) ?? []).filter(t => t > cutoff);
+  if (hits.length >= RATE_MAX_REQUESTS) {
+    recentScans.set(userId, hits);
+    return true;
+  }
+
+  hits.push(now);
+  recentScans.set(userId, hits);
+
+  // Bound memory: drop users whose window has fully expired, then oldest-first
+  // if that wasn't enough (Map iterates in insertion order).
+  if (recentScans.size > RATE_MAX_TRACKED_USERS) {
+    for (const [key, times] of recentScans) {
+      if (times.length === 0 || times[times.length - 1] <= cutoff) recentScans.delete(key);
+    }
+    for (const key of recentScans.keys()) {
+      if (recentScans.size <= RATE_MAX_TRACKED_USERS) break;
+      if (key !== userId) recentScans.delete(key);
+    }
+  }
+  return false;
+}
+
 /** Verify the caller's Supabase JWT; returns the user id or null. */
 async function requireUser(req: Request): Promise<string | null> {
   const jwt = /^Bearer\s+(.+)$/i.exec(req.headers.get('authorization') || '')?.[1];
@@ -113,8 +151,15 @@ async function scanWithProvider(
 }
 
 export async function POST(req: Request) {
-  if (!(await requireUser(req))) {
+  const userId = await requireUser(req);
+  if (!userId) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+  }
+  if (isRateLimited(userId)) {
+    return NextResponse.json(
+      { error: 'Too many scans in a short window. Give it a few minutes and try again.' },
+      { status: 429, headers: { 'Retry-After': String(Math.ceil(RATE_WINDOW_MS / 1000)) } },
+    );
   }
 
   let body: { imageBase64?: unknown; mediaType?: unknown; providerIds?: unknown };

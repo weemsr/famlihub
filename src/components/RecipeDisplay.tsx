@@ -1,6 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { asStringArray, type RecipeBody } from '@/lib/types';
+import { cleanRecipeLine } from '@/lib/html';
 import IngredientRow from '@/app/recipes/_components/IngredientRow';
 
 /**
@@ -9,8 +10,9 @@ import IngredientRow from '@/app/recipes/_components/IngredientRow';
  * viewer render identically from one source of truth.
  *
  * The scaler owns its own state and resets whenever the recipe changes.
- * `showAddToGrocery` gates the per-ingredient "Add to grocery list" affordance:
- * the Recipes tab passes `true`; the Meals viewer leaves it off (view-only).
+ * `showAddToGrocery` gates the per-ingredient "Add to grocery list" affordance.
+ * Both the Recipes tab and the Meals viewer pass `true`; it defaults to off so
+ * a future read-only surface can opt out.
  */
 interface RecipeLike {
   id: string;
@@ -106,6 +108,9 @@ export default function RecipeDisplay({
                   borderRadius: 999,
                   cursor: 'pointer',
                   transition: 'background 120ms ease, color 120ms ease',
+                  // Removes the 300ms tap delay and double-tap-to-zoom, so a
+                  // quick series of scale changes registers every time.
+                  touchAction: 'manipulation',
                   minWidth: mode === 'custom' ? 72 : 52,
                 }}
               >
@@ -156,7 +161,7 @@ export default function RecipeDisplay({
       ) : (
         <ol style={{ paddingLeft: 24, color: 'var(--text-primary)' }}>
           {instructions.map((inst, i) => (
-            <li key={i} style={{ marginBottom: 12 }}>{inst.replace(/<[^>]*>?/gm, '')}</li>
+            <li key={i} style={{ marginBottom: 12 }}>{cleanRecipeLine(inst)}</li>
           ))}
         </ol>
       )}

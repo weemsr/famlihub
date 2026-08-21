@@ -1,5 +1,5 @@
 import { LIMITS, capLen } from './limits';
-import { parseCsv, toCsvRow } from './csv';
+import { parseCsvRows, toCsvRow } from './csv';
 import type { PantryLevel, PantryLocation } from './types';
 
 /**
@@ -78,16 +78,16 @@ function matchHeaders(header: string[]): { index: Partial<Record<CsvField, numbe
  * the UI can show exactly what's wrong and where, rather than failing silently.
  */
 export function parsePantryCsv(text: string): ImportResult {
-  const rows = parseCsv(text);
+  const rows = parseCsvRows(text);
   if (rows.length === 0) {
     return { items: [], issues: [], matched: {}, fatal: 'That file is empty.' };
   }
 
-  const { index, matched } = matchHeaders(rows[0]);
+  const { index, matched } = matchHeaders(rows[0].cells);
   if (index.item === undefined) {
     return {
       items: [], issues: [], matched: {},
-      fatal: `No "Item" column found. The first row must be a header containing a column named Item (or Name/Product). Found: ${rows[0].map(h => h.trim()).filter(Boolean).join(', ') || '(nothing)'}`,
+      fatal: `No "Item" column found. The first row must be a header containing a column named Item (or Name/Product). Found: ${rows[0].cells.map(h => h.trim()).filter(Boolean).join(', ') || '(nothing)'}`,
     };
   }
 
@@ -99,10 +99,13 @@ export function parsePantryCsv(text: string): ImportResult {
   const items: ImportItem[] = [];
   const issues: ImportIssue[] = [];
   const seen = new Set<string>();
+  let firstSkippedLine: number | null = null;
 
-  dataRows.forEach((cells, i) => {
-    const lineNo = i + 2; // +1 for zero-index, +1 for the header row
-    if (items.length >= MAX_IMPORT_ROWS) return;
+  dataRows.forEach(({ cells, line: lineNo }) => {
+    if (items.length >= MAX_IMPORT_ROWS) {
+      if (firstSkippedLine === null) firstSkippedLine = lineNo;
+      return;
+    }
 
     const cell = (f: CsvField) => {
       const at = index[f];
@@ -148,8 +151,14 @@ export function parsePantryCsv(text: string): ImportResult {
     items.push(item);
   });
 
-  if (dataRows.length > MAX_IMPORT_ROWS) {
-    issues.push({ row: MAX_IMPORT_ROWS + 1, message: `Only the first ${MAX_IMPORT_ROWS} items were read; the rest were ignored.` });
+  // Reported only when the cap actually stopped us, and pointed at the real
+  // line we stopped on — a file with lots of blank or duplicate rows can be
+  // longer than the cap without ever hitting it.
+  if (firstSkippedLine !== null) {
+    issues.push({
+      row: firstSkippedLine,
+      message: `Only the first ${MAX_IMPORT_ROWS} items were read; everything from line ${firstSkippedLine} on was ignored.`,
+    });
   }
 
   return { items, issues, matched };

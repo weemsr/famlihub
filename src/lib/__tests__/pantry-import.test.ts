@@ -129,4 +129,20 @@ describe('parsePantryCsv — structure enforcement', () => {
     expect(res.matched.quantity).toBe('qty');
     expect(res.matched.location).toBeUndefined();
   });
+
+  it('reports the real spreadsheet line even after blank rows', () => {
+    // Regression: blank rows are dropped during parsing, so issue line numbers
+    // used to drift and point at the wrong row.
+    const res = parsePantryCsv('Item,Location\nRice,Pantry\n\nBeans,Nowhere\n');
+    const issue = res.issues.find(i => i.message.includes('Nowhere'));
+    expect(issue).toBeDefined();
+    expect(issue!.row).toBe(4); // header 1, Rice 2, blank 3, Beans 4
+  });
+
+  it('points duplicate and empty-name issues at the right line too', () => {
+    const res = parsePantryCsv('Item\nRice\n\n\n,\nRice\n');
+    const dupe = res.issues.find(i => i.message.includes('Duplicate'));
+    expect(dupe).toBeDefined();
+    expect(dupe!.row).toBe(6);
+  });
 });

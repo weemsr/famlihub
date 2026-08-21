@@ -3,7 +3,8 @@ import { useState, useEffect, useCallback } from 'react';
 import { Search, NotebookText } from 'lucide-react';
 import { fetchRecipeFromUrl } from '@/app/actions/recipe';
 import { supabase } from '@/lib/supabase';
-import { asStringArray, type RecipeBody } from '@/lib/types';
+import { asStringArray, hadStoredContent, type RecipeBody } from '@/lib/types';
+import { cleanRecipeLine } from '@/lib/html';
 import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 import { useUndoDelete } from '@/components/UndoSnackbar';
@@ -32,6 +33,7 @@ export default function RecipesPage() {
   const [editIngredients, setEditIngredients] = useState('');
   const [editInstructions, setEditInstructions] = useState('');
   const [editServings, setEditServings] = useState('');
+  const [editError, setEditError] = useState<string | null>(null);
 
   const [creationMode, setCreationMode] = useState<CreationMode>('link');
   const [manualTitle, setManualTitle] = useState('');
@@ -104,7 +106,7 @@ export default function RecipesPage() {
 
     const { data, error: dbError } = await supabase.from('items').insert({
       type: 'recipe',
-      title: res.recipe.title,
+      title: capLen(res.recipe.title, LIMITS.title),
       body: {
         ingredients: res.recipe.ingredients,
         instructions: res.recipe.instructions,
@@ -179,17 +181,22 @@ export default function RecipesPage() {
   const startEdit = (recipe: RecipeItem, e: React.MouseEvent) => {
     e.stopPropagation();
     setEditingId(recipe.id);
+    setEditError(null);
     setEditTitle(recipe.title);
 
-    const rawIngs = asStringArray(recipe.body?.ingredients);
-    const rawInsts = asStringArray(recipe.body?.instructions);
-    const cleanIngs = rawIngs.map(i => i.replace(/<[^>]*>?/gm, ''));
-    const cleanInsts = rawInsts.map(i => i.replace(/<[^>]*>?/gm, ''));
+    const cleanIngs = asStringArray(recipe.body?.ingredients).map(cleanRecipeLine);
+    const cleanInsts = asStringArray(recipe.body?.instructions).map(cleanRecipeLine);
 
     setEditIngredients(cleanIngs.join('\n'));
     setEditInstructions(cleanInsts.join('\n'));
     setEditServings(recipe.body?.servings ? String(recipe.body.servings) : '');
     setExpandedId(recipe.id);
+  };
+
+  const cancelEdit = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingId(null);
+    setEditError(null);
   };
 
   const saveEdit = async (e: React.MouseEvent) => {
@@ -204,7 +211,27 @@ export default function RecipesPage() {
     const recipeToUpdate = recipes.find(r => r.id === editingId);
     if (!recipeToUpdate) return;
 
-    const newTitle = capLen(editTitle, LIMITS.title);
+    // Refuse to blank out a recipe that still has content stored. An editor
+    // that opened empty means we couldn't read the stored shape, not that the
+    // user cleared it — saving that through would destroy the only copy.
+    const wouldWipeIngredients =
+      newIngredients.length === 0 && hadStoredContent(recipeToUpdate.body?.ingredients);
+    const wouldWipeInstructions =
+      newInstructions.length === 0 && hadStoredContent(recipeToUpdate.body?.instructions);
+    if (wouldWipeIngredients || wouldWipeInstructions) {
+      setEditError(
+        `This would erase the saved ${wouldWipeIngredients ? 'ingredients' : 'instructions'}, ` +
+        'so nothing was changed. Clear the box on purpose? Delete the recipe instead.'
+      );
+      return;
+    }
+
+    const newTitle = capLen(editTitle.trim(), LIMITS.title);
+    if (!newTitle) {
+      setEditError('Give this recipe a name.');
+      return;
+    }
+
     const updatedBody: RecipeBody = {
       ...recipeToUpdate.body,
       ingredients: newIngredients,
@@ -215,9 +242,13 @@ export default function RecipesPage() {
     const prevRecipes = recipes;
     setRecipes(recipes.map(r => r.id === editingId ? { ...r, title: newTitle, body: updatedBody } : r));
     setEditingId(null);
+    setEditError(null);
 
     const { error } = await supabase.from('items').update({ title: newTitle, body: updatedBody }).eq('id', editingId);
-    if (error) setRecipes(prevRecipes);
+    if (error) {
+      setRecipes(prevRecipes);
+      setEditError(error.message);
+    }
   };
 
   const filtered = recipes.filter(r => (r.title || '').toLowerCase().includes(search.toLowerCase()));
@@ -292,8 +323,10 @@ export default function RecipesPage() {
               editIngredients={editIngredients}
               editInstructions={editInstructions}
               editServings={editServings}
+              editError={isEditing ? editError : null}
               onStartEdit={startEdit}
               onSaveEdit={saveEdit}
+              onCancelEdit={cancelEdit}
               onChangeEditTitle={setEditTitle}
               onChangeEditIngredients={setEditIngredients}
               onChangeEditInstructions={setEditInstructions}

@@ -5,6 +5,7 @@ import { supabase } from '@/lib/supabase';
 import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 import Fab from '@/components/Fab';
+import { useToday } from '@/components/useToday';
 import type { CreditCardBody, CreditCardItem } from '@/lib/types';
 import ItemCard from './_components/ItemCard';
 import ItemForm from './_components/ItemForm';
@@ -24,7 +25,7 @@ const FILTERS: { id: CardFilter; label: string }[] = [
 ];
 
 export default function CreditCardsPage() {
-  const today = useMemo(() => { const d = new Date(); d.setHours(0, 0, 0, 0); return d; }, []);
+  const today = useToday();
   const todayIso = isoDay(today);
 
   const [items, setItems] = useState<CreditCardItem[]>([]);

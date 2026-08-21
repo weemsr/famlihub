@@ -20,8 +20,10 @@ export default function RecipeCard({
   editIngredients,
   editInstructions,
   editServings,
+  editError,
   onStartEdit,
   onSaveEdit,
+  onCancelEdit,
   onChangeEditTitle,
   onChangeEditIngredients,
   onChangeEditInstructions,
@@ -36,8 +38,10 @@ export default function RecipeCard({
   editIngredients: string;
   editInstructions: string;
   editServings: string;
+  editError: string | null;
   onStartEdit: (recipe: RecipeItem, e: React.MouseEvent) => void;
   onSaveEdit: (e: React.MouseEvent) => void;
+  onCancelEdit: (e: React.MouseEvent) => void;
   onChangeEditTitle: (v: string) => void;
   onChangeEditIngredients: (v: string) => void;
   onChangeEditInstructions: (v: string) => void;
@@ -85,7 +89,25 @@ export default function RecipeCard({
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
           {isEditing ? (
-            <button className="btn" style={{ padding: '6px 16px', width: 'auto', background: 'var(--success-color)' }} onClick={onSaveEdit}>Save</button>
+            <>
+              <button
+                className="btn"
+                style={{ padding: '6px 16px', width: 'auto', background: 'var(--success-color)', touchAction: 'manipulation' }}
+                onClick={onSaveEdit}
+              >
+                Save
+              </button>
+              {/* Without this there is no way out of edit mode except Save,
+                  which always writes — so a mistaken tap on the pencil had to
+                  be committed. */}
+              <button
+                className="btn btn-secondary"
+                style={{ padding: '6px 16px', width: 'auto', touchAction: 'manipulation' }}
+                onClick={onCancelEdit}
+              >
+                Cancel
+              </button>
+            </>
           ) : (
             <>
               <button
@@ -143,6 +165,19 @@ export default function RecipeCard({
 
           {isEditing ? (
             <>
+              {editError && (
+                <p
+                  role="alert"
+                  className="text-sm"
+                  style={{
+                    color: 'var(--danger-color)', fontWeight: 600, marginBottom: 16,
+                    padding: '10px 14px', borderRadius: 12,
+                    background: 'var(--surface-hover)',
+                  }}
+                >
+                  {editError}
+                </p>
+              )}
               <h3 style={{ marginTop: 8, marginBottom: 12 }}>Ingredients</h3>
               <textarea
                 className="input mb-4"

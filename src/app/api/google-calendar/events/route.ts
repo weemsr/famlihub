@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server';
 import ICAL from 'ical.js';
 import { getSupabaseAdmin } from '@/lib/supabase-admin';
-import { CALENDAR_DEFAULT_COLOR, type GoogleCalendarEntry } from '@/lib/types';
+import { CALENDAR_DEFAULT_COLOR, calendarEntryFallbackId, type GoogleCalendarEntry } from '@/lib/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -56,7 +56,9 @@ function readCalendarEntries(body: SettingBody | null): GoogleCalendarEntry[] {
       const e = raw as Partial<GoogleCalendarEntry>;
       if (typeof e.url !== 'string' || !e.url) continue;
       out.push({
-        id: typeof e.id === 'string' && e.id ? e.id : Math.random().toString(36).slice(2),
+        // Must match the browser's fallback exactly, or the per-calendar status
+        // returned below can't be matched back to the row that asked for it.
+        id: typeof e.id === 'string' && e.id ? e.id : calendarEntryFallbackId(e.url),
         name: typeof e.name === 'string' && e.name ? e.name : 'Google Calendar',
         url: e.url,
         color: typeof e.color === 'string' && /^#[0-9a-fA-F]{6}$/.test(e.color) ? e.color : CALENDAR_DEFAULT_COLOR,

@@ -1,7 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { asStringArray, type RecipeBody } from '@/lib/types';
-import { stripHtml } from '@/lib/html';
+import { cleanRecipeLine } from '@/lib/html';
 import IngredientRow from '@/app/recipes/_components/IngredientRow';
 
 /**
@@ -161,7 +161,7 @@ export default function RecipeDisplay({
       ) : (
         <ol style={{ paddingLeft: 24, color: 'var(--text-primary)' }}>
           {instructions.map((inst, i) => (
-            <li key={i} style={{ marginBottom: 12 }}>{stripHtml(inst)}</li>
+            <li key={i} style={{ marginBottom: 12 }}>{cleanRecipeLine(inst)}</li>
           ))}
         </ol>
       )}

@@ -4,7 +4,7 @@ import { Search, NotebookText } from 'lucide-react';
 import { fetchRecipeFromUrl } from '@/app/actions/recipe';
 import { supabase } from '@/lib/supabase';
 import { asStringArray, hadStoredContent, type RecipeBody } from '@/lib/types';
-import { stripHtml } from '@/lib/html';
+import { cleanRecipeLine } from '@/lib/html';
 import { LIMITS, capLen } from '@/lib/limits';
 import PageHeader from '@/components/PageHeader';
 import { useUndoDelete } from '@/components/UndoSnackbar';
@@ -184,8 +184,8 @@ export default function RecipesPage() {
     setEditError(null);
     setEditTitle(recipe.title);
 
-    const cleanIngs = asStringArray(recipe.body?.ingredients).map(stripHtml);
-    const cleanInsts = asStringArray(recipe.body?.instructions).map(stripHtml);
+    const cleanIngs = asStringArray(recipe.body?.ingredients).map(cleanRecipeLine);
+    const cleanInsts = asStringArray(recipe.body?.instructions).map(cleanRecipeLine);
 
     setEditIngredients(cleanIngs.join('\n'));
     setEditInstructions(cleanInsts.join('\n'));

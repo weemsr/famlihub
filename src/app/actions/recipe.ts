@@ -6,6 +6,7 @@ import { parseRecipeYield } from '@/lib/recipe-scale';
 import { asStringArray } from '@/lib/types';
 import { LIMITS, capLen } from '@/lib/limits';
 import { harvestIngredientLists } from '@/lib/recipe-extract';
+import { cleanRecipeLine } from '@/lib/html';
 
 /**
  * Normalize a scraped list into bounded string lines. The extraction paths
@@ -15,7 +16,7 @@ import { harvestIngredientLists } from '@/lib/recipe-extract';
 function toSafeLines(value: unknown): string[] {
   return asStringArray(value)
     .slice(0, LIMITS.list)
-    .map(line => capLen(line.trim(), LIMITS.line))
+    .map(line => capLen(cleanRecipeLine(line), LIMITS.line))
     .filter(Boolean);
 }
 
@@ -522,7 +523,7 @@ export async function fetchRecipeFromUrl(url: string) {
     // Bound everything before it leaves the server. `ingredients` and
     // `instructions` are assigned from untyped scraped JSON above, so they can
     // hold objects or unbounded runs of swept-up DOM text.
-    const safeTitle = capLen(title.trim(), LIMITS.title) || 'Untitled Recipe';
+    const safeTitle = capLen(cleanRecipeLine(title), LIMITS.title) || 'Untitled Recipe';
     const safeIngredients = toSafeLines(ingredients);
     const safeInstructions = toSafeLines(instructions);
 

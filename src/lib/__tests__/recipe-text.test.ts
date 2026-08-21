@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripHtml } from '../html';
+import { stripHtml, decodeEntities, cleanRecipeLine } from '../html';
 import { asStringArray, hadStoredContent } from '../types';
 
 describe('stripHtml', () => {
@@ -54,5 +54,52 @@ describe('hadStoredContent', () => {
     expect(hadStoredContent([])).toBe(false);
     expect(hadStoredContent(undefined)).toBe(false);
     expect(hadStoredContent('')).toBe(false);
+  });
+});
+
+describe('decodeEntities', () => {
+  it('decodes the numeric entities recipe sites bury in JSON-LD', () => {
+    // Regression: justonecookbook ships literal &#32; / &#39; inside its
+    // JSON-LD. JSON is not HTML, so JSON.parse leaves them as visible text.
+    expect(decodeEntities('Cut 2&#32;onions into thin slices.')).toBe('Cut 2 onions into thin slices.');
+    expect(decodeEntities('When it&#39;s hot')).toBe("When it's hot");
+    expect(decodeEntities('&#x2153; cup')).toBe('⅓ cup');
+  });
+
+  it('decodes common named entities', () => {
+    expect(decodeEntities('salt &amp; pepper')).toBe('salt & pepper');
+    expect(decodeEntities('180&deg;C &ndash; 200&deg;C')).toBe('180°C – 200°C');
+    expect(decodeEntities('caf&eacute;')).toBe('café');
+  });
+
+  it('leaves unknown or malformed entities alone rather than mangling text', () => {
+    expect(decodeEntities('5 &fakeentity; cups')).toBe('5 &fakeentity; cups');
+    expect(decodeEntities('a & b')).toBe('a & b');
+    expect(decodeEntities('&#0;')).toBe('&#0;');
+    expect(decodeEntities('&#1114112;')).toBe('&#1114112;'); // past the Unicode range
+  });
+
+  it('is a no-op on text with no ampersand', () => {
+    expect(decodeEntities('2 cups flour')).toBe('2 cups flour');
+  });
+});
+
+describe('cleanRecipeLine', () => {
+  it('fixes the WP Recipe Maker artefacts', () => {
+    // Verbatim from justonecookbook's JSON-LD: doubled parens, double space.
+    expect(cleanRecipeLine('2  onions ((large; 1¼ lb, 567 g))')).toBe('2 onions (large; 1¼ lb, 567 g)');
+    expect(cleanRecipeLine('2 Tbsp unsalted butter ((divided))')).toBe('2 Tbsp unsalted butter (divided)');
+  });
+
+  it('combines tag stripping, decoding and whitespace collapse', () => {
+    expect(cleanRecipeLine('  Add <strong>1 Tbsp&#32;miso</strong>  paste  ')).toBe('Add 1 Tbsp miso paste');
+  });
+
+  it('still leaves a bare < alone', () => {
+    expect(cleanRecipeLine('Cook until temp is <165 F')).toBe('Cook until temp is <165 F');
+  });
+
+  it('leaves genuinely nested parentheses intact', () => {
+    expect(cleanRecipeLine('1 cup stock (or broth (low sodium))')).toBe('1 cup stock (or broth (low sodium))');
   });
 });
